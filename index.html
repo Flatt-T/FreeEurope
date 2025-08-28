@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>EuroLingo — Multilingual Voice Tutor (Language-aware Flashcards)</title>
+<title>EuroLingo — Multilingual Voice Tutor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -21,12 +21,8 @@
   button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:var(--text);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   .primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#01151a;font-weight:800}
   .danger{background:var(--danger)} .muted{color:var(--muted)}
-  input{background:#0b1220;border:1px solid #24324c;color:#var(--text);border-radius:10px;padding:8px 10px}
+  input,select{background:#0b1220;border:1px solid #24324c;color:var(--text);border-radius:10px;padding:8px 10px}
   .big{padding:14px 18px;font-size:1.05em;border-radius:14px}
-
-  .langbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0b142a,#0d1733)}
-  .langbtn{padding:6px 10px;border-radius:999px;border:1px solid #284065;background:#0b1220;cursor:pointer}
-  .langbtn.active{background:linear-gradient(90deg,#22d3ee,#60a5fa);color:#042d37;border-color:#2d6a87;font-weight:800}
 
   .chat{display:grid;grid-template-rows:auto 1fr auto;min-height:48vh;border-radius:16px;overflow:hidden}
   .chat .top{padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0b142a,#0d1733)}
@@ -65,9 +61,13 @@
       <span class="pill">Streak: <b id="streak">0</b> 🔥 • Combo: <b id="combo">x1</b></span>
       <div class="xpbar"><div id="xpfill"></div></div>
       <span class="pill"><b id="xp">0</b> XP</span>
+      <span class="pill">LLM: <b id="llmSource">—</b></span>
     </div>
   </div>
-  <div id="langbar" class="wrap langbar"></div>
+  <div class="wrap" style="padding-top:0;padding-bottom:10px;gap:10px">
+    <label for="langSelect" class="pill">Language</label>
+    <select id="langSelect"></select>
+  </div>
 </header>
 
 <main>
@@ -81,7 +81,7 @@
         <span class="pill" style="margin-left:auto">Level: <b id="level" class="lvl">A1</b></span>
       </div>
       <div class="muted" style="margin-top:6px">
-        Speaks your chosen language with a short English subtitle. Listens immediately and supports <b>barge-in</b>.
+        Speaks your chosen language with an English subtitle. Barge-in supported.
       </div>
     </div>
     <div id="chat" class="mid" aria-live="polite"></div>
@@ -96,9 +96,10 @@
     <div class="settings pad" style="border-top:1px dashed #20314f">
       <div class="section">
         <b>OpenRouter</b>
-        <input id="orKey" type="password" placeholder="OpenRouter API key (free models)"/>
+        <input id="orKey" type="password" placeholder="OpenRouter API key (recommended)"/>
         <input id="orModel" value="meta-llama/llama-3.2-11b-vision-instruct:free" size="42"/>
         <button id="saveOR" class="pill">Save</button>
+        <button id="testOR" class="pill">Test</button>
         <span id="orStatus" class="muted"></span>
       </div>
       <div class="section">
@@ -173,80 +174,35 @@ const LANGS = [
 ];
 
 /* ===== State & Config ===== */
-const EMBEDDED_OR_KEY="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";
-const S={
-  level:'A1',
-  scenario:'general',
-  stop:true,
-  speaking:false,
-  history:[],
-  deck:[], // loaded per-language
-  lang:localStorage.getItem('lang_key')||'es',
-  currentIndex:0,
-  lastExpected:"",
-  lastEN:""
-};
-const cfg={
-  openrouterKey:localStorage.getItem('or_key')||EMBEDDED_OR_KEY,
-  openrouterModel:localStorage.getItem('or_model')||'meta-llama/llama-3.2-11b-vision-instruct:free',
-  groqKey:localStorage.getItem('groq_key')||''
-};
+const EMBEDDED_OR_KEY="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"; // may be rate-limited
+const S={level:'A1',scenario:'general',stop:true,speaking:false,history:[],deck:[],lang:localStorage.getItem('lang_key')||'es',currentIndex:0,lastExpected:"",lastEN:"",turn:0,userFacts:{}};
+const cfg={openrouterKey:localStorage.getItem('or_key')||EMBEDDED_OR_KEY,openrouterModel:localStorage.getItem('or_model')||'meta-llama/llama-3.2-11b-vision-instruct:free',groqKey:localStorage.getItem('groq_key')||''};
 
 /* ===== UI refs ===== */
-const chatEl=document.getElementById('chat'),statusEl=document.getElementById('status');
-const xpEl=document.getElementById('xp'),xpFill=document.getElementById('xpfill');
-const levelEl=document.getElementById('level');
-const bar=document.getElementById('langbar');
-const sayRes=document.getElementById('sayResult'),sayScoreEl=document.getElementById('sayScore');
+const chatEl=document.getElementById('chat'),statusEl=document.getElementById('status'),llmSourceEl=document.getElementById('llmSource');
+const xpEl=document.getElementById('xp'),xpFill=document.getElementById('xpfill');const levelEl=document.getElementById('level');
+const sayRes=document.getElementById('sayResult'),sayScoreEl=document.getElementById('sayScore');const langSelect=document.getElementById('langSelect');
+
+/* ===== Helpers ===== */
 function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
 function L(){return LANGS.find(x=>x.key===S.lang)||LANGS[0]}
-
-/* ===== Chat logging with smooth auto-scroll ===== */
-function scrollChat(){
-  requestAnimationFrame(()=>chatEl.scrollTo({top:chatEl.scrollHeight,behavior:'smooth'}));
-}
-function logAssistant(native,en){
-  const d=document.createElement('div');
-  d.className='bubble';
-  d.innerHTML=`<strong>Tutor:</strong> ${esc(native)}<div class="subtitle">EN: ${esc(en)}</div>`;
-  chatEl.appendChild(d);
-  scrollChat();
-}
-function logUser(t){
-  const d=document.createElement('div');
-  d.className='bubble me';
-  d.innerHTML=`<strong>You:</strong> ${esc(t)}`;
-  chatEl.appendChild(d);
-  scrollChat();
-}
-function logSys(t){
-  const d=document.createElement('div');
-  d.className='bubble sys';
-  d.textContent=t;
-  chatEl.appendChild(d);
-  scrollChat();
-}
+function scrollChat(){requestAnimationFrame(()=>chatEl.scrollTo({top:chatEl.scrollHeight,behavior:'smooth'}))}
+function logAssistant(native,en){const d=document.createElement('div');d.className='bubble';d.innerHTML=`<strong>Tutor:</strong> ${esc(native)}<div class="subtitle">EN: ${esc(en)}</div>`;chatEl.appendChild(d);scrollChat()}
+function logUser(t){const d=document.createElement('div');d.className='bubble me';d.innerHTML=`<strong>You:</strong> ${esc(t)}`;chatEl.appendChild(d);scrollChat()}
+function logSys(t){const d=document.createElement('div');d.className='bubble sys';d.textContent=t;chatEl.appendChild(d);scrollChat()}
 function setStatus(t){statusEl.textContent=t}
 
-/* ===== Language bar ===== */
-function renderLangBar(){
-  bar.innerHTML='';
+/* ===== Language Dropdown ===== */
+function renderLangSelect(){
+  langSelect.innerHTML='';
   LANGS.forEach(x=>{
-    const b=document.createElement('button');
-    b.className='langbtn'+(x.key===S.lang?' active':'');
-    b.textContent=x.label;
-    b.onclick=()=>{
-      S.lang=x.key;
-      localStorage.setItem('lang_key',S.lang);
-      // reload the per-language deck and refresh UI
-      loadDeck();
-      if (!S.deck.length) seedDeckForLang(S.lang);
-      showCard(0);
-      resetConversation(true);
-      renderLangBar();
-    };
-    bar.appendChild(b);
+    const opt=document.createElement('option'); opt.value=x.key; opt.textContent=x.label; if(x.key===S.lang) opt.selected=true; langSelect.appendChild(opt);
   });
+  langSelect.onchange=()=>{
+    S.lang=langSelect.value; localStorage.setItem('lang_key',S.lang);
+    loadDeck(); if(!S.deck.length) seedDeckForLang(S.lang);
+    showCard(0); resetConversation(true);
+  };
 }
 
 /* ===== TTS / barge-in ===== */
@@ -261,48 +217,53 @@ async function recordBlob(ms=8000){if(!navigator.mediaDevices?.getUserMedia)retu
 async function listenGroq(lang){try{const b=await recordBlob(7000);if(!b)return'';const f=new FormData();f.append('file',b,'speech.webm');f.append('model','whisper-large-v3-turbo');f.append('language',(lang||'en-GB').slice(0,2));const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{'Authorization':'Bearer '+cfg.groqKey},body:f});if(!r.ok)throw new Error('groq stt error');const j=await r.json();return j.text||''}catch{return''}}
 async function listen(lang){return cfg.groqKey?await listenGroq(lang):await listenBrowser(lang)}
 
-/* ===== OpenRouter + WebLLM ===== */
+/* ===== OpenRouter + WebLLM (with visible diagnostics) ===== */
 async function orChat(messages,max=220){
-  const body={model:cfg.openrouterModel,messages,temperature:0.6,max_tokens:max};
-  const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openrouterKey,'HTTP-Referer':location.origin,'X-Title':'EuroLingo Tutor'},
-    body:JSON.stringify(body)
-  });
-  if(!r.ok) throw new Error('openrouter error');
-  const j=await r.json();
-  return (j.choices?.[0]?.message?.content||'').trim();
+  const body={model:cfg.openrouterModel,messages,temperature:0.7,max_tokens:max};
+  let resp, text='';
+  try{
+    resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+cfg.openrouterKey,
+        'HTTP-Referer':location.origin,
+        'X-Title':'EuroLingo Tutor'
+      },
+      body:JSON.stringify(body)
+    });
+  }catch(e){
+    throw new Error('network-failed');
+  }
+  if(!resp.ok){
+    const code=resp.status;
+    const msg=`OpenRouter error ${code}`;
+    throw new Error(msg);
+  }
+  const j=await resp.json();
+  text=(j.choices?.[0]?.message?.content||'').trim();
+  return text;
 }
 let webllmEngine=null,webllmReady=false;
-async function initWebLLM(){
-  if(webllmReady)return;
-  if(!('mlc'in window))throw new Error('WebLLM missing');
-  const cb=(x)=>setStatus('loading: '+(x.text||''));
-  try{
-    webllmEngine=await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback:cb})
-  }catch{
-    webllmEngine=await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback:cb})
-  }
-  webllmReady=true; setStatus('model ready (local)');
-}
-async function wllmChat(messages,max=200){
-  await initWebLLM();
-  const out=await webllmEngine.chat.completions.create({messages,temperature:0.6,max_tokens:max,stream:false});
-  return out.choices?.[0]?.message?.content||'';
-}
+async function initWebLLM(){ if(webllmReady)return; if(!('mlc'in window))throw new Error('WebLLM missing');
+  const cb=(x)=>setStatus('loading: '+(x.text||'')); try{ webllmEngine=await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback:cb}) }catch{ webllmEngine=await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback:cb}) } webllmReady=true; }
+async function wllmChat(messages,max=200){ await initWebLLM(); const out=await webllmEngine.chat.completions.create({messages,temperature:0.7,max_tokens:max,stream:false}); return out.choices?.[0]?.message?.content||'' }
 
-/* ===== Strict prompt + robust parsing ===== */
+/* ===== Conversational prompt tuned for reactivity ===== */
 function sysPrompt(){
   return `
-You are "${L().tutor}", a ${L().label} travel tutor for short role-play dialogues.
+You are "${L().tutor}", a ${L().label} travel tutor. Respond concisely and react SPECIFICALLY to the user's content.
 
-OUTPUT FORMAT — EXACTLY TWO LINES, no extra lines, no markdown, no emojis:
-${L().tag}: <natural ${L().label}, ≤60 words, includes a follow-up question, gentle inline correction; if asked "how do I say/what does/(local equivalent)", give the ${L().label} phrase first in quotes then continue. Do NOT start with "Tutor:".>
-EN: <5–15 word English subtitle of the ${L().tag} line>
+DIALOGUE OUTPUT — EXACTLY TWO LINES:
+${L().tag}: <natural ${L().label}, ≤60 words. Do: answer their content; correct gently inline; ask a SHORT follow-up relevant to what they said; vary topic naturally. If they asked "how do I say/what does/(local equivalent)", put the ${L().label} phrase first in quotes, then continue. Never start with "Tutor:".>
+EN: <5–15 word English subtitle paraphrasing the ${L().tag} line>
 
-Style: fluid, friendly, varied (restaurant/taxi/directions/hotel/money/emergencies/social). No repetitive confirmations. No phonetic transcriptions. Do not add any labels like "Tutor:" or "Assistant:".
+Avoid repeating "Do you want to continue?" or listing topics unless the user is silent or unclear twice in a row.
+Keep role-play fluid (restaurant/taxi/directions/hotel/money/emergencies/social). No phonetic transcriptions. No extra labels.
 `.trim();
 }
+
+/* ===== Parsing (robust) ===== */
 function parseTwo(text){
   const TAG=L().tag;
   const raw=(text||"").replace(/^\s*(Tutor|Assistant)\s*:\s*/i,"");
@@ -313,274 +274,105 @@ function parseTwo(text){
   m1=new RegExp(`^\\s*(?:${allTags}):\\s*(.+)$`,"im").exec(raw);
   if(m1&&m2) return {nat:m1[1].trim(),en:m2[1].trim()};
   const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
-  const nat=(lines[0]||"¿Seguimos?").replace(/^(Tutor|Assistant)\s*:\s*/i,"").trim();
-  const en=(lines[1]||"Let’s keep going.").replace(/^EN:\s*/i,"").trim();
-  return {nat,en};
+  return {nat:(lines[0]||"¿Seguimos?"),en:(lines[1]||"Let’s keep going.")};
+}
+
+/* ===== Lightweight intent memory to stay on-topic ===== */
+function updateFactsFromUser(uttr){
+  const s=(uttr||'').toLowerCase();
+  if(/hotel|hostel|airbnb/.test(s)) S.userFacts.context='hotel';
+  if(/taxi|uber|cab|airport|flight/.test(s)) S.userFacts.context='transport';
+  if(/vegetarian|vegan|allerg/.test(s)) S.userFacts.diet='diet';
+  const place = (s.match(/\b(paris|madrid|berlin|rome|lisbon|athens|vienna|prague|budapest|bucharest|sofia|amsterdam|stockholm|oslo|helsinki)\b/)||[])[1];
+  if(place) S.userFacts.city=place;
 }
 
 /* ===== Scenario + meters ===== */
-function detectScenario(t){const s=(t||'').toLowerCase();if(/resta|menu|camar|rechnung|tisch|garçon|bill|mesa|menú|speisekarte|kellner|carte/.test(s))return 'restaurant';if(/taxi|airport|aeropuerto|flughafen|aéroport|gare|station|metro|bus|train|ubahn|u-bahn/.test(s))return 'taxi';if(/direc|left|right|straight|izquierda|derecha|gauche|droite|links|rechts|geradeaus|wo ist/.test(s))return 'directions';if(/hotel|room|check|llave|schlüssel|clé|frühstück|desayuno|reception/.test(s))return 'hotel';if(/money|euros?|price|precio|wie viel|combien|tarjeta|efectivo|cash/.test(s))return 'money';if(/help|ayuda|hilfe|police|polizei|ambulance|apotheke|farmacia|emergen/.test(s))return 'emergencies';if(/friend|foto|recommend|recomienda|empfehl|social|smalltalk|charla|conversa/.test(s))return 'social';return S.scenario||'restaurant'}
+function detectScenario(t){const s=(t||'').toLowerCase();if(/resta|menu|camar|rechnung|tisch|garçon|bill|mesa|menú|speisekarte|kellner|carte|order|dish/.test(s))return 'restaurant';if(/taxi|airport|aeropuerto|flughafen|aéroport|gare|station|metro|bus|train|ubahn|u-bahn|flight/.test(s))return 'taxi';if(/direc|left|right|straight|izquierda|derecha|gauche|droite|links|rechts|geradeaus|wo ist|map/.test(s))return 'directions';if(/hotel|room|check|llave|schlüssel|clé|frühstück|desayuno|reception|reservation/.test(s))return 'hotel';if(/money|euros?|price|precio|wie viel|combien|tarjeta|efectivo|cash|atm/.test(s))return 'money';if(/help|ayuda|hilfe|police|polizei|ambulance|apotheke|farmacia|emergen|lost|stolen/.test(s))return 'emergencies';if(/friend|foto|recommend|recomienda|empfehl|social|smalltalk|charla|conversa|museum|bar|park/.test(s))return 'social';return S.scenario||'social'}
 const bars={pron:document.getElementById('pronBar'),accent:document.getElementById('accentBar'),flu:document.getElementById('fluencyBar'),conf:document.getElementById('confBar')};
 const tips={pron:document.getElementById('pronTip'),accent:document.getElementById('accentTip'),flu:document.getElementById('fluencyTip'),conf:document.getElementById('confTip')};
 function norm(n){return Math.max(0,Math.min(100,Math.round(n)))}
-function heuristic(user,expected){
-  const a=(user||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const b=(expected||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const A=new Set(a.split('')),B=new Set(b.split(''));
-  const inter=[...A].filter(x=>B.has(x)).length;
-  const uni=new Set([...A,...B]).size||1;
-  const sim=inter/uni;
-  return{pron:norm(30+60*sim),accent:norm(30+60*sim),fluency:norm(30+Math.min(70,(user.split(/\s+/).length||0)*6)),confidence:norm(25+Math.min(75,(user.length||0)/40*75)),feedback:"Heuristic only."}
-}
-async function aiScore(user,expected){
-  try{
-    const sys=`You are a strict ${L().label} pronunciation coach. Return JSON: {"pron":0-100,"accent":0-100,"fluency":0-100,"confidence":0-100,"feedback":"<=15 words"}. Penalise English or wrong language.`;
-    const usr=`LanguageTag=${L().tag}\nTarget="${expected||''}"\nUserSaid="${user||''}"`;
-    const raw=await orChat([{role:'system',content:sys},{role:'user',content:usr}],150);
-    const json=JSON.parse((raw.match(/\{[\s\S]*\}$/)||[raw])[0]);
-    return{pron:norm(json.pron),accent:norm(json.accent),fluency:norm(json.fluency),confidence:norm(json.confidence),feedback:String(json.feedback||'Good effort.').slice(0,60)}
-  }catch{
-    return heuristic(user,expected)
-  }
-}
-function updMeters(o){
-  bars.pron.style.width=o.pron+'%';tips.pron.textContent=o.feedback||'';
-  bars.accent.style.width=o.accent+'%';tips.accent.textContent=o.accent<55?'Mind stress & vowels.':'Accent improving.';
-  bars.flu.style.width=o.fluency+'%';tips.flu.textContent=o.fluency<55?'Short, complete clauses.':'Good flow.';
-  bars.conf.style.width=o.confidence+'%';tips.conf.textContent=o.confidence<55?'Steady pace, project.':'Confident tone.';
-}
+function heuristic(user,expected){const a=(user||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const b=(expected||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const A=new Set(a.split('')),B=new Set(b.split(''));const inter=[...A].filter(x=>B.has(x)).length;const uni=new Set([...A,...B]).size||1;const sim=inter/uni;return{pron:norm(30+60*sim),accent:norm(30+60*sim),fluency:norm(30+Math.min(70,(user.split(/\s+/).length||0)*6)),confidence:norm(25+Math.min(75,(user.length||0)/40*75)),feedback:"Heuristic only."}}
+async function aiScore(user,expected){try{const sys=`You are a strict ${L().label} pronunciation coach. Return JSON: {"pron":0-100,"accent":0-100,"fluency":0-100,"confidence":0-100,"feedback":"<=15 words"}. Penalise English or wrong language.`;const usr=`LanguageTag=${L().tag}\nTarget="${expected||''}"\nUserSaid="${user||''}"`;const raw=await orChat([{role:'system',content:sys},{role:'user',content:usr}],150);const json=JSON.parse((raw.match(/\{[\s\S]*\}$/)||[raw])[0]);return{pron:norm(json.pron),accent:norm(json.accent),fluency:norm(json.fluency),confidence:norm(json.confidence),feedback:String(json.feedback||'Good effort.').slice(0,60)}}catch{return heuristic(user,expected)}}
+function updMeters(o){bars.pron.style.width=o.pron+'%';tips.pron.textContent=o.feedback||'';bars.accent.style.width=o.accent+'%';tips.accent.textContent=o.accent<55?'Mind stress & vowels.':'Accent improving.';bars.flu.style.width=o.fluency+'%';tips.flu.textContent=o.fluency<55?'Short, complete clauses.':'Good flow.';bars.conf.style.width=o.confidence+'%';tips.conf.textContent=o.confidence<55?'Steady pace, project.':'Confident tone.'}
 
-/* ===== Flashcards (per-language decks) ===== */
+/* ===== Flashcards (per-language) ===== */
 const FC={front:document.getElementById('fcFront'),back:document.getElementById('fcBack'),dueCount:document.getElementById('dueCount'),deckInfo:document.getElementById('deckInfo')};
-
-function deckKey(){ return 'deck_multi_v4_'+S.lang; }
+function deckKey(){return 'deck_multi_v4_'+S.lang}
 function days(n){return n*86400000}
-function loadDeck(){
-  try{ S.deck = JSON.parse(localStorage.getItem(deckKey())||'[]'); }catch{ S.deck=[]; }
-}
-function saveDeck(){
-  localStorage.setItem(deckKey(), JSON.stringify(S.deck||[]));
-}
-function newCard(en,native,mod){
-  return{
-    id:`${S.lang}::${mod||'focus'}::${native}`,
-    lang:S.lang,
-    frontEN:en,
-    backNative:native,
-    ease:2.5,interval:0,due:Date.now(),reps:0,lapses:0,module:mod||'focus'
-  }
-}
-function reviewCard(c,g){
-  const n={...c};
-  if(g===0){n.lapses++;n.interval=0;n.ease=Math.max(1.3,n.ease-0.2);n.due=Date.now()+days(0.04)}
-  else{
-    if(n.interval===0)n.interval=(g===3?3:1);
-    else if(n.interval===1)n.interval=(g===3?6:3);
-    else n.interval=Math.round(n.interval*(n.ease)*(g===1?0.7:1));
-    n.ease=Math.max(1.3,n.ease+(g===3?0.15:(g===1?-0.05:0.05)));
-    n.due=Date.now()+days(n.interval)
-  }
-  n.reps++; return n;
-}
-function addToDeck(en,native,mod){
-  if(!en||!native)return;
-  const id=`${S.lang}::${mod||'focus'}::${native}`;
-  if(S.deck.find(d=>d.id===id))return;
-  S.deck.push(newCard(en,native,mod)); saveDeck();
-}
-function showCard(i){
-  if(!S.deck.length){
-    FC.front.textContent="No cards yet for this language.";
-    FC.back.textContent="Practice will appear here.";
-    FC.dueCount.textContent='0';
-    FC.deckInfo.textContent='Module: —';
-    S.lastExpected=''; S.lastEN='';
-    return;
-  }
-  S.currentIndex=((i%S.deck.length)+S.deck.length)%S.deck.length;
-  const c=S.deck[S.currentIndex];
-  FC.front.textContent=c.frontEN;
-  FC.back.textContent=c.backNative;
-  const due=S.deck.filter(k=>k.due<=Date.now());
-  FC.dueCount.textContent=String(due.length||S.deck.length);
-  FC.deckInfo.textContent='Module: '+(c.module||'focus');
-  S.lastExpected=c.backNative; S.lastEN=c.frontEN;
-}
-function gradeCard(g){
-  if(!S.deck.length)return;
-  const i=S.currentIndex; S.deck[i]=reviewCard(S.deck[i],g); saveDeck(); showCard(i+1);
-}
-
+function loadDeck(){try{S.deck=JSON.parse(localStorage.getItem(deckKey())||'[]')}catch{S.deck=[]}}
+function saveDeck(){localStorage.setItem(deckKey(),JSON.stringify(S.deck||[]))}
+function newCard(en,native,mod){return{id:`${S.lang}::${mod||'focus'}::${native}`,lang:S.lang,frontEN:en,backNative:native,ease:2.5,interval:0,due:Date.now(),reps:0,lapses:0,module:mod||'focus'}}
+function reviewCard(c,g){const n={...c};if(g===0){n.lapses++;n.interval=0;n.ease=Math.max(1.3,n.ease-0.2);n.due=Date.now()+days(0.04)}else{if(n.interval===0)n.interval=(g===3?3:1);else if(n.interval===1)n.interval=(g===3?6:3);else n.interval=Math.round(n.interval*(n.ease)*(g===1?0.7:1));n.ease=Math.max(1.3,n.ease+(g===3?0.15:(g===1?-0.05:0.05)));n.due=Date.now()+days(n.interval)}n.reps++;return n}
+function addToDeck(en,native,mod){if(!en||!native)return;const id=`${S.lang}::${mod||'focus'}::${native}`;if(S.deck.find(d=>d.id===id))return;S.deck.push(newCard(en,native,mod));saveDeck()}
+function showCard(i){if(!S.deck.length){FC.front.textContent="No cards yet for this language.";FC.back.textContent="Practice will appear here.";FC.dueCount.textContent='0';FC.deckInfo.textContent='Module: —';S.lastExpected='';S.lastEN='';return}S.currentIndex=((i%S.deck.length)+S.deck.length)%S.deck.length;const c=S.deck[S.currentIndex];FC.front.textContent=c.frontEN;FC.back.textContent=c.backNative;const due=S.deck.filter(k=>k.due<=Date.now());FC.dueCount.textContent=String(due.length||S.deck.length);FC.deckInfo.textContent='Module: '+(c.module||'focus');S.lastExpected=c.backNative;S.lastEN=c.frontEN}
+function gradeCard(g){if(!S.deck.length)return;const i=S.currentIndex;S.deck[i]=reviewCard(S.deck[i],g);saveDeck();showCard(i+1)}
 document.getElementById('prevCard').onclick=()=>{if(S.deck.length)showCard(S.currentIndex-1)}
 document.getElementById('nextCard').onclick=()=>{if(S.deck.length)showCard(S.currentIndex+1)}
-document.getElementById('showCard').onclick=()=>{/* both visible by design */}
-document.getElementById('again').onclick=()=>gradeCard(0);
-document.getElementById('hard').onclick=()=>gradeCard(1);
-document.getElementById('good').onclick=()=>gradeCard(2);
-document.getElementById('easy').onclick=()=>gradeCard(3);
+document.getElementById('showCard').onclick=()=>{}
+document.getElementById('again').onclick=()=>gradeCard(0);document.getElementById('hard').onclick=()=>gradeCard(1);document.getElementById('good').onclick=()=>gradeCard(2);document.getElementById('easy').onclick=()=>gradeCard(3)
 document.getElementById('speakCard').onclick=()=>{const c=S.deck[S.currentIndex];if(c)speak(c.backNative,L().tts)}
-document.getElementById('sayCard').onclick=async()=>{
-  const c=S.deck[S.currentIndex]; if(!c)return;
-  const heard=await listen(L().stt);
-  document.getElementById('sayResult').textContent=heard?('You said: '+heard):'';
-  if(!heard)return;
-  const res=await aiScore(heard,c.backNative); updMeters(res);
-  const label=res.pron>=85?'Excellent':res.pron>=70?'Good':res.pron>=50?'Fair':'Poor';
-  document.getElementById('sayScore').textContent=`Score: ${label} (${res.pron})`;
-};
+document.getElementById('sayCard').onclick=async()=>{const c=S.deck[S.currentIndex];if(!c)return;const heard=await listen(L().stt);document.getElementById('sayResult').textContent=heard?('You said: '+heard):'';if(!heard)return;const res=await aiScore(heard,c.backNative);updMeters(res);const label=res.pron>=85?'Excellent':res.pron>=70?'Good':res.pron>=50?'Fair':'Poor';document.getElementById('sayScore').textContent=`Score: ${label} (${res.pron})`}
 
-/* ===== Seeding per-language ===== */
-function seedDeckForLang(lang){
-  // Minimal but useful starters per language
-  const seed = {
-    es: [
-      ["A table for two, please", "Una mesa para dos, por favor", "restaurant"],
-      ["Where is the metro station?", "¿Dónde está la estación de metro?", "directions"],
-      ["The bill, please", "La cuenta, por favor", "restaurant"]
-    ],
-    de: [
-      ["To the airport, please", "Zum Flughafen, bitte.", "taxi"],
-      ["Where is the metro station?", "Wo ist die U-Bahn-Station?", "directions"],
-      ["The bill, please", "Die Rechnung, bitte.", "restaurant"]
-    ],
-    fr: [
-      ["Where is the metro station?", "Où est la station de métro ?", "directions"],
-      ["The bill, please", "L’addition, s’il vous plaît.", "restaurant"],
-      ["Do you take card?", "Est-ce que je peux payer par carte ?", "money"]
-    ],
-    it: [
-      ["A table for two, please", "Un tavolo per due, per favore", "restaurant"],
-      ["To the airport, please", "All’aeroporto, per favore.", "taxi"]
-    ],
-    pt: [
-      ["A table for two, please", "Uma mesa para dois, por favor", "restaurant"],
-      ["Do you take card?", "Posso pagar com cartão?", "money"]
-    ],
-    pl: [
-      ["The bill, please", "Poproszę rachunek.", "restaurant"],
-      ["Where is the metro station?", "Gdzie jest stacja metra?", "directions"]
-    ],
-    nl: [
-      ["The bill, please", "De rekening, alstublieft.", "restaurant"],
-      ["To the airport, please", "Naar de luchthaven, alstublieft.", "taxi"]
-    ],
-    sv: [
-      ["A table for two, please", "Ett bord för två, tack.", "restaurant"],
-      ["Where is the metro station?", "Var ligger tunnelbanestationen?", "directions"]
-    ],
-    da: [
-      ["The bill, please", "Regningen, tak.", "restaurant"],
-      ["To the airport, please", "Til lufthavnen, tak.", "taxi"]
-    ],
-    nb: [
-      ["A table for two, please", "Et bord for to, takk.", "restaurant"],
-      ["Where is the metro station?", "Hvor er T-banestasjonen?", "directions"]
-    ],
-    fi: [
-      ["A table for two, please", "Pöytä kahdelle, kiitos.", "restaurant"],
-      ["To the airport, please", "Lentokentälle, kiitos.", "taxi"]
-    ],
-    el: [
-      ["The bill, please", "Τον λογαριασμό, παρακαλώ.", "restaurant"],
-      ["Where is the metro station?", "Πού είναι ο σταθμός του μετρό;", "directions"]
-    ],
-    cs: [
-      ["The bill, please", "Účet, prosím.", "restaurant"],
-      ["To the airport, please", "Na letiště, prosím.", "taxi"]
-    ],
-    hu: [
-      ["The bill, please", "A számlát, kérem.", "restaurant"],
-      ["Where is the metro station?", "Hol van a metróállomás?", "directions"]
-    ],
-    ro: [
-      ["The bill, please", "Nota, vă rog.", "restaurant"],
-      ["To the airport, please", "La aeroport, vă rog.", "taxi"]
-    ],
-    bg: [
-      ["The bill, please", "Сметката, моля.", "restaurant"],
-      ["Where is the metro station?", "Къде е метростанцията?", "directions"]
-    ],
-    lt: [
-      ["The bill, please", "Sąskaitą, prašau.", "restaurant"],
-      ["To the airport, please", "Į oro uostą, prašau.", "taxi"]
-    ]
-  }[lang] || [
-    ["A table for two, please","Una mesa para dos, por favor","restaurant"]
-  ];
+/* ===== Harvest phrases from replies ===== */
+function harvest(native,en){const m=native.match(/[“”"„«»‚‘’‹›]([^“”"„«»‚‘’‹›]+)[“”"„«»‚‘’‹›]/);const phrase=(m?.[1]||'').trim();if(phrase)addToDeck(en||'—',phrase,S.scenario)}
 
-  S.deck = [];
-  seed.forEach(([en,native,mod])=>S.deck.push(newCard(en,native,mod)));
-  saveDeck();
-}
+/* ===== Idle prompt (localized) ===== */
+function idlePrompt(){const map={es:{nat:'“Perdón, ¿podrías repetirlo?” Dime qué pasó o qué necesitas.',en:'Sorry—please repeat or say what you need.'},de:{nat:'„Entschuldigung, könntest du das wiederholen?“ Sag mir, was passiert ist.',en:'Please repeat or tell me what happened.'},fr:{nat:'« Pardon, tu peux répéter ? » Dis-moi ce qui se passe.',en:'Please repeat or tell me what’s up.'}};const t=map[L().key]||map.es;return `${L().tag}: ${t.nat}\nEN: ${t.en}`}
 
-/* ===== Conversation ===== */
-function baseSystem(){return sysPrompt()+`\nCurrent scenario: ${S.scenario}.`}
+/* ===== Conversation assembly ===== */
+function baseSystem(){return sysPrompt()+`\nScenario: ${S.scenario}. Known facts: ${JSON.stringify(S.userFacts)}.`}
 function msgs(user){const h=[{role:'system',content:baseSystem()},...S.history.slice(-10)];if(user!=null)h.push({role:'user',content:user});return h}
+
+/* ===== Reply with explicit engine indication and fallback ===== */
 async function reply(userText){
-  let raw=''; try{ raw=await orChat(msgs(userText)); }catch{ try{ raw=await wllmChat(msgs(userText)); }catch{ raw=''; } }
-  let {nat,en}=parseTwo(raw);
-  if(!nat||!en||/^(Tutor|Assistant)\s*:/i.test(nat)){
-    const topic=detectScenario(userText||'');
-    const safe={
-      restaurant:{nat:'“¿Quieres una mesa?” Puedo ayudarte a pedir. ¿Dentro o terraza?',en:'Shall I help you order? Inside or terrace?'},
-      taxi:{nat:'“Al centro, por favor.” ¿Adónde exactamente? ¿Tienes dirección?',en:'Where exactly should we go?'},
-      directions:{nat:'“Sigue recto y gira a la izquierda.” ¿A qué lugar vas?',en:'Go straight, then left. Where to?'},
-      hotel:{nat:'“Tengo una reserva a nombre de…” ¿Check-in o desayuno?',en:'Check-in or breakfast question?'},
-      money:{nat:'“¿Puedo pagar con tarjeta?” ¿Efectivo o tarjeta?',en:'Card or cash?'},
-      emergencies:{nat:'“Necesito ayuda, por favor.” ¿Policía o ambulancia?',en:'Police or ambulance?'},
-      social:{nat:'“¿De dónde eres?” ¿Viajas por trabajo o placer?',en:'Travel for work or leisure?'},
-      general:{nat:'“Perfecto, sigamos.” ¿Restaurante, taxi, direcciones, hotel, dinero, emergencias o social?',en:'Pick a topic to practice.'}
-    }[topic]||{nat:'¿Seguimos practicando?',en:'Shall we continue?'};
-    nat=safe.nat; en=safe.en;
+  let raw='', source='OpenRouter';
+  try{
+    raw=await orChat(msgs(userText));
+    llmSourceEl.textContent='OpenRouter';
+  }catch(e){
+    source='Local (WebLLM)';
+    llmSourceEl.textContent='Local';
+    try{ raw=await wllmChat(msgs(userText)) }catch{ raw='' }
+    logSys('Using local model (OpenRouter unavailable or key/rate limit).');
   }
-  return {nat,en};
-}
-function harvest(native,en){
-  const m=native.match(/[“”"„«»‚‘’‹›]([^“”"„«»‚‘’‹›]+)[“”"„«»‚‘’‹›]/);
-  const phrase=(m?.[1]||'').trim();
-  if(phrase) addToDeck(en||'—',phrase,S.scenario);
-}
-function idlePrompt(){
-  const map = {
-    es: { nat: '“Perdón, ¿podrías repetirlo?” También puedo darte una frase útil. ¿Restaurante o taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    de: { nat: '„Entschuldigung, könntest du das wiederholen?“ Ich kann dir auch eine nützliche Redewendung geben. Restaurant oder Taxi?', en:'Sorry—please repeat? Restaurant or taxi?' },
-    fr: { nat: '« Pardon, tu peux répéter ? » Je peux aussi te donner une phrase utile. Restaurant ou taxi ?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    it: { nat: '« Scusa, puoi ripeterlo? » Posso anche darti una frase utile. Ristorante o taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    pt: { nat: '“Desculpa, podes repetir?” Também posso dar-te uma frase útil. Restaurante ou táxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    pl: { nat: '„Przepraszam, możesz powtórzyć?” Mogę też podać przydatne wyrażenie. Restauracja czy taksówka?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    lt: { nat: '„Atsiprašau, ar gali pakartoti?“ Galiu duoti naudingą frazę. Restoranas ar taksi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    nl: { nat: '“Sorry, kun je het herhalen?” Ik kan ook een handige zin geven. Restaurant of taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    sv: { nat: '”Ursäkta, kan du upprepa?” Jag kan också ge en nytta fras. Restaurang eller taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    da: { nat: '“Undskyld, kan du gentage?” Jeg kan også give en nyttig sætning. Restaurant eller taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    nb: { nat: '« Unnskyld, kan du gjenta? » Jeg kan også gi en nyttig frase. Restaurant eller taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    fi: { nat: '”Anteeksi, voitko toistaa?” Voin myös antaa hyödyllisen lauseen. Ravintola vai taksi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    el: { nat: '« Συγγνώμη, μπορείς να το επαναλάβεις; » Μπορώ και να σου δώσω μια χρήσιμη φράση. Εστιατόριο ή ταξί;', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    cs: { nat: '„Promiň, můžeš to zopakovat?“ Můžu ti dát i užitečnou frázi. Restaurace nebo taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    hu: { nat: '„Bocs, megismételnéd?” Adhatok egy hasznos kifejezést is. Étterem vagy taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    ro: { nat: '„Scuză-mă, poți repeta?” Îți pot da și o frază utilă. Restaurant sau taxi?', en:'Sorry—could you repeat? Restaurant or taxi?' },
-    bg: { nat: '„Извинявай, можеш ли да повториш?“ Мога и да ти дам полезна фраза. Ресторант или такси?', en:'Sorry—could you repeat? Restaurant or taxi?' }
-  };
-  const t=map[L().key]||map.es;
-  return `${L().tag}: ${t.nat}\nEN: ${t.en}`;
+  let {nat,en}=parseTwo(raw);
+
+  // If model was generic/empty twice in a row, gently reframe based on userText & facts
+  const wasGeneric = !nat || /¿Seguimos|Pick a topic|continue/i.test(nat);
+  if (wasGeneric && userText){
+    const city=S.userFacts.city?` en ${S.userFacts.city}`:'';
+    const scen=detectScenario(userText);
+    const targeted = {
+      restaurant:`“¿Quieres pedir${city}?” Puedo sugerir platos según lo que dijiste. ¿Entrada o plato principal?`,
+      taxi:`“Te llevo${city}.” ¿Tienes dirección exacta o punto de referencia?`,
+      directions:`“Gira a la izquierda en la próxima.” ¿Ves una farmacia o banco cerca?`,
+      hotel:`“Tengo una reserva.” ¿Llegas tarde o necesitas late check-out?`,
+      money:`“¿Puedo pagar con tarjeta?” ¿Presupuesto aproximado o prefieres efectivo?`,
+      emergencies:`“Necesito ayuda ahora.” ¿Qué pasó y dónde estás exactamente?`,
+      social:`“¿Viajas por trabajo o placer?” ¿Cuántos días te quedas${city}?`,
+      general:`“Perfecto, hablemos de lo que acabas de mencionar.” ¿Detalles?`
+    }[scen];
+    if(targeted){ nat=targeted; en='Okay—let’s handle what you just said.'; }
+  }
+
+  return {nat,en,source};
 }
 
 /* ===== Turn handling ===== */
-let listening=false;
-async function safeListen(lang,timeoutMs=12000){
-  listening=true; setStatus('🎙️ listening…');
-  const timer=new Promise(r=>setTimeout(()=>r('__TIMEOUT__'),timeoutMs));
-  const heard=await Promise.race([listen(lang),timer]);
-  listening=false; return heard==='__TIMEOUT__'?'':heard;
-}
+let listening=false, unclearCount=0;
+async function safeListen(lang,timeoutMs=12000){listening=true;setStatus('🎙️ listening…');const timer=new Promise(r=>setTimeout(()=>r('__TIMEOUT__'),timeoutMs));const heard=await Promise.race([listen(lang),timer]);listening=false;return heard==='__TIMEOUT__'?'':heard}
 async function handleTurn(text){
   if(!text){
+    unclearCount++;
     const {nat,en}=parseTwo(idlePrompt());
     logAssistant(nat,en); S.lastExpected=nat; S.lastEN=en;
     setStatus('speaking…'); await speak(nat,L().tts); setStatus('ready');
     S.history.push({role:'assistant',content:`${L().tag}: ${nat}\nEN: ${en}`});
     return;
   }
-  logUser(text); S.scenario=detectScenario(text);
+  unclearCount=0;
+  logUser(text); S.scenario=detectScenario(text); updateFactsFromUser(text);
   setStatus('thinking…');
   const {nat,en}=await reply(text);
   logAssistant(nat,en); S.lastExpected=nat; S.lastEN=en;
@@ -594,27 +386,13 @@ async function start(){
   if(!S.stop) return; S.stop=false; levelEl.textContent=S.level;
   if(navigator.mediaDevices?.getUserMedia){try{await navigator.mediaDevices.getUserMedia({audio:true}).then(s=>s.getTracks().forEach(t=>t.stop())).catch(()=>{})}catch{}}
   setStatus('speaking…');
-  const greetings={
-    es:"¡Hola! Soy tu profe de viaje. ¿Practicamos restaurante, taxi, direcciones, hotel, dinero, emergencias o social?",
-    de:"Hallo! Ich bin dein Reisecoach. Üben wir Restaurant, Taxi, Wegbeschreibung, Hotel, Geld, Notfälle oder Smalltalk?",
-    fr:"Salut ! Je suis ton coach de voyage. On pratique restaurant, taxi, directions, hôtel, argent, urgences ou social ?",
-    it:"Ciao! Sono il tuo coach di viaggio. Alleniamo ristorante, taxi, indicazioni, hotel, soldi, emergenze o sociale?",
-    pt:"Olá! Sou o seu treinador de viagem. Praticamos restaurante, táxi, direções, hotel, dinheiro, emergências ou social?",
-    pl:"Cześć! Jestem twoim trenerem podróży. Ćwiczymy restaurację, taksówkę, wskazówki, hotel, pieniądze, nagłe sytuacje czy rozmowę?",
-    lt:"Sveikas! Aš tavo kelionių treneris. Ar praktikuojame restoraną, taksi, kryptis, viešbutį, pinigus, skubius atvejus ar pokalbį?",
-    nl:"Hoi! Ik ben je reiscoach. Oefenen we restaurant, taxi, route, hotel, geld, noodgevallen of sociaal?",
-    sv:"Hej! Jag är din resecoach. Övar vi restaurang, taxi, vägbeskrivning, hotell, pengar, nödfall eller socialt?",
-    da:"Hej! Jeg er din rejsecoach. Øver vi restaurant, taxi, vejvisning, hotel, penge, nødsituationer eller socialt?",
-    nb:"Hei! Jeg er din reisecoach. Øver vi restaurant, taxi, veibeskrivelse, hotell, penger, nødstilfeller eller sosialt?",
-    fi:"Hei! Olen matkavalmentajasi. Harjoitellaanko ravintolaa, taksia, reittejä, hotellia, rahaa, hätätilanteita vai small talkia?",
-    el:"Γεια! Είμαι ο προπονητής ταξιδιού σου. Εξασκούμαστε σε εστιατόριο, ταξί, οδηγίες, ξενοδοχείο, χρήματα, επείγοντα ή κουβέντα;",
-    cs:"Ahoj! Jsem tvůj trenér cestování. Budeme trénovat restauraci, taxi, navigaci, hotel, peníze, pohotovost nebo konverzaci?",
-    hu:"Szia! Az utazási edződ vagyok. Gyakoroljuk az éttermet, taxit, útbaigazítást, hotelt, pénzt, vészhelyzetet vagy társalgást?",
-    ro:"Salut! Sunt antrenorul tău de călătorie. Exersăm restaurant, taxi, indicații, hotel, bani, urgențe sau social?",
-    bg:"Здравей! Аз съм твоят треньор по пътувания. Упражняваме ресторант, такси, указания, хотел, пари, спешни случаи или разговор?"
+  const greetMap={
+    es:"¡Hola! Soy tu profe. Cuéntame qué pasó o qué necesitas ahora mismo.",
+    de:"Hallo! Ich bin dein Reisecoach. Sag mir, was gerade los ist.",
+    fr:"Salut ! Je suis ton coach. Dis-moi ce dont tu as besoin maintenant."
   };
-  const greet=greetings[L().key]||"¡Hola! Empecemos. ¿Qué practicamos?";
-  logAssistant(greet,"Tell me what you want to practice.");
+  const greet=greetMap[L().key]||"¡Hola! Dime qué necesitas ahora mismo.";
+  logAssistant(greet,"Tell me what you need right now.");
   await speak(greet,L().tts);
   setStatus('🎙️ listening…');
   while(!S.stop){
@@ -633,32 +411,26 @@ document.getElementById('stopBtn').onclick=()=>stopAll()
 document.getElementById('interruptBtn').onclick=()=>{cancelSpeak();setStatus('interrupted → listening')}
 
 /* ===== Settings ===== */
-document.getElementById('saveOR').onclick=()=>{
-  const k=(document.getElementById('orKey').value||'').trim();
-  const m=(document.getElementById('orModel').value||'').trim();
-  if(k)cfg.openrouterKey=k; cfg.openrouterModel=m||cfg.openrouterModel;
-  localStorage.setItem('or_key',cfg.openrouterKey);
-  localStorage.setItem('or_model',cfg.openrouterModel);
-  document.getElementById('orStatus').textContent='OpenRouter ready.'
-}
-document.getElementById('saveGroq').onclick=()=>{
-  cfg.groqKey=(document.getElementById('groqKey').value||'').trim();
-  localStorage.setItem('groq_key',cfg.groqKey);
-  document.getElementById('groqStatus').textContent=cfg.groqKey?'STT via Groq Whisper':'STT via browser'
+document.getElementById('saveOR').onclick=()=>{const k=(document.getElementById('orKey').value||'').trim();const m=(document.getElementById('orModel').value||'').trim();if(k)cfg.openrouterKey=k;cfg.openrouterModel=m||cfg.openrouterModel;localStorage.setItem('or_key',cfg.openrouterKey);localStorage.setItem('or_model',cfg.openrouterModel);document.getElementById('orStatus').textContent='Saved. Try Test.'}
+document.getElementById('testOR').onclick=async()=>{document.getElementById('orStatus').textContent='Testing…';try{const ok=await orChat([{role:'system',content:'Say "OK" only.'},{role:'user',content:'Respond.'}],10);document.getElementById('orStatus').textContent=ok?'OpenRouter OK ✅':'No response ❌';llmSourceEl.textContent= ok?'OpenRouter':'—';}catch(e){document.getElementById('orStatus').textContent='OpenRouter error ❌ ('+e.message+')';llmSourceEl.textContent='—';}}
+document.getElementById('saveGroq').onclick=()=>{cfg.groqKey=(document.getElementById('groqKey').value||'').trim();localStorage.setItem('groq_key',cfg.groqKey);document.getElementById('groqStatus').textContent=cfg.groqKey?'STT via Groq Whisper':'STT via browser'}
+
+/* ===== Seeding per-language ===== */
+function seedDeckForLang(lang){
+  const seed = {
+    es: [["A table for two, please","Una mesa para dos, por favor","restaurant"],["Where is the metro?","¿Dónde está el metro?","directions"],["The bill, please","La cuenta, por favor","restaurant"]],
+    de: [["To the airport, please","Zum Flughafen, bitte.","taxi"],["Where is the metro?","Wo ist die U-Bahn?","directions"],["The bill, please","Die Rechnung, bitte.","restaurant"]],
+    fr: [["Where is the metro?","Où est le métro ?","directions"],["Do you take card?","Je peux payer par carte ?","money"],["The bill, please","L’addition, s’il vous plaît.","restaurant"]]
+  }[lang] || [["A table for two, please","Una mesa para dos, por favor","restaurant"]];
+  S.deck=[]; seed.forEach(([en,native,mod])=>S.deck.push(newCard(en,native,mod))); saveDeck();
 }
 
 /* ===== Init ===== */
 (function init(){
-  renderLangBar();
-  document.getElementById('streak').textContent='0';
-  document.getElementById('combo').textContent='x1';
-  xpEl.textContent='0'; levelEl.textContent=S.level;
-
-  loadDeck();
-  if(!S.deck.length) seedDeckForLang(S.lang);
-  showCard(0);
-
-  logSys("Ready. Press Start — it will speak, then listen. Flashcards follow the language you pick.");
+  renderLangSelect();
+  document.getElementById('streak').textContent='0';document.getElementById('combo').textContent='x1';xpEl.textContent='0';levelEl.textContent=S.level;
+  loadDeck(); if(!S.deck.length) seedDeckForLang(S.lang); showCard(0);
+  logSys("Ready. Press Start — ‘LLM’ badge shows which engine replied (OpenRouter vs Local).");
 })();
 </script>
 </body>

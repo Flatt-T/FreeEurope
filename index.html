@@ -6,6 +6,8 @@
 <title>EuroLingo — Multilingual Voice Tutor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<!-- Keep origin in referrer for cross-site calls (works on GitHub Pages) -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <style>
   :root{--bg:#0a0f1d;--panel:#0f172a;--text:#e6eef8;--muted:#9fb0c7;--accent:#22d3ee;--danger:#ef4444;--border:#1e293b;--chip:#152338}
   *{box-sizing:border-box} html,body{margin:0;background:linear-gradient(180deg,#080c19,#0c1224 30%,#0b1220);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
@@ -18,7 +20,7 @@
   main{max-width:1200px;margin:12px auto;padding:0 16px;display:grid;grid-template-columns:1fr;gap:12px}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
   .pad{padding:12px} .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:#fff;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:var(--text);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   .primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#01151a;font-weight:800}
   .danger{background:var(--danger)} .muted{color:var(--muted)}
   input,select{background:#0b1220;border:1px solid #24324c;color:var(--text);border-radius:10px;padding:8px 10px}
@@ -97,7 +99,7 @@
       <div class="section">
         <b>OpenRouter</b>
         <input id="orKey" type="password" placeholder="OpenRouter API key (recommended)"/>
-        <input id="orModel" value="" size="42" placeholder="model id (auto-fallback enabled)"/>
+        <input id="orModel" value="google/gemini-flash-1.5" size="42"/>
         <label class="pill" style="gap:6px"><input type="checkbox" id="forceRemote"/> Force OpenRouter</label>
         <button id="saveOR" class="pill">Save</button>
         <button id="testOR" class="pill">Test</button>
@@ -154,51 +156,18 @@
 
 <script>
 /* ===== Languages ===== */
-const LANGS = [
-  {key:'es', label:'Español',  tts:'es-ES', stt:'es-ES', tag:'ES', tutor:'Profe de Viaje'},
-  {key:'de', label:'Deutsch',  tts:'de-DE', stt:'de-DE', tag:'DE', tutor:'Reisecoach'},
-  {key:'fr', label:'Français', tts:'fr-FR', stt:'fr-FR', tag:'FR', tutor:'Coach de voyage'},
-  {key:'it', label:'Italiano', tts:'it-IT', stt:'it-IT', tag:'IT', tutor:'Coach di viaggio'},
-  {key:'pt', label:'Português',tts:'pt-PT', stt:'pt-PT', tag:'PT', tutor:'Treinador de viagem'},
-  {key:'pl', label:'Polski',   tts:'pl-PL', stt:'pl-PL', tag:'PL', tutor:'Trener podróży'},
-  {key:'lt', label:'Lietuvių', tts:'lt-LT', stt:'lt-LT', tag:'LT', tutor:'Kelionių treneris'},
-  {key:'nl', label:'Nederlands',tts:'nl-NL',stt:'nl-NL', tag:'NL', tutor:'Reiscoach'},
-  {key:'sv', label:'Svenska',  tts:'sv-SE', stt:'sv-SE', tag:'SV', tutor:'Resecoach'},
-  {key:'da', label:'Dansk',    tts:'da-DK', stt:'da-DK', tag:'DA', tutor:'Rejsecoach'},
-  {key:'nb', label:'Norsk',    tts:'nb-NO', stt:'nb-NO', tag:'NO', tutor:'Reisecoach'},
-  {key:'fi', label:'Suomi',    tts:'fi-FI', stt:'fi-FI', tag:'FI', tutor:'Matkavalmentaja'},
-  {key:'el', label:'Ελληνικά', tts:'el-GR', stt:'el-GR', tag:'EL', tutor:'Προπονητής ταξιδιού'},
-  {key:'cs', label:'Čeština',  tts:'cs-CZ', stt:'cs-CZ', tag:'CS', tutor:'Trenér cestování'},
-  {key:'hu', label:'Magyar',   tts:'hu-HU', stt:'hu-HU', tag:'HU', tutor:'Utazási edző'},
-  {key:'ro', label:'Română',   tts:'ro-RO', stt:'ro-RO', tag:'RO', tutor:'Antrenor de călătorie'},
-  {key:'bg', label:'Български',tts:'bg-BG', stt:'bg-BG', tag:'BG', tutor:'Треньор по пътувания'}
-];
+const LANGS=[{key:'es',label:'Español',tts:'es-ES',stt:'es-ES',tag:'ES',tutor:'Profe de Viaje'},{key:'de',label:'Deutsch',tts:'de-DE',stt:'de-DE',tag:'DE',tutor:'Reisecoach'},{key:'fr',label:'Français',tts:'fr-FR',stt:'fr-FR',tag:'FR',tutor:'Coach de voyage'},{key:'it',label:'Italiano',tts:'it-IT',stt:'it-IT',tag:'IT',tutor:'Coach di viaggio'},{key:'pt',label:'Português',tts:'pt-PT',stt:'pt-PT',tag:'PT',tutor:'Treinador de viagem'},{key:'pl',label:'Polski',tts:'pl-PL',stt:'pl-PL',tag:'PL',tutor:'Trener podróży'},{key:'lt',label:'Lietuvių',tts:'lt-LT',stt:'lt-LT',tag:'LT',tutor:'Kelionių treneris'},{key:'nl',label:'Nederlands',tts:'nl-NL',stt:'nl-NL',tag:'NL',tutor:'Reiscoach'},{key:'sv',label:'Svenska',tts:'sv-SE',stt:'sv-SE',tag:'SV',tutor:'Resecoach'},{key:'da',label:'Dansk',tts:'da-DK',stt:'da-DK',tag:'DA',tutor:'Rejsecoach'},{key:'nb',label:'Norsk',tts:'nb-NO',stt:'nb-NO',tag:'NO',tutor:'Reisecoach'},{key:'fi',label:'Suomi',tts:'fi-FI',stt:'fi-FI',tag:'FI',tutor:'Matkavalmentaja'},{key:'el',label:'Ελληνικά',tts:'el-GR',stt:'el-GR',tag:'EL',tutor:'Προπονητής ταξιδιού'},{key:'cs',label:'Čeština',tts:'cs-CZ',stt:'cs-CZ',tag:'CS',tutor:'Trenér cestování'},{key:'hu',label:'Magyar',tts:'hu-HU',stt:'hu-HU',tag:'HU',tutor:'Utazási edző'},{key:'ro',label:'Română',tts:'ro-RO',stt:'ro-RO',tag:'RO',tutor:'Antrenor de călătorie'},{key:'bg',label:'Български',tts:'bg-BG',stt:'bg-BG',tag:'BG',tutor:'Треньор по пътувания'}];
 
-/* ===== Config & Fallbacks ===== */
-const EMBEDDED_OR_KEY = "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";
-const FALLBACK_MODELS = [
-  "google/gemini-flash-1.5",
-  "meta-llama/llama-3.1-70b-instruct:free",
-  "meta-llama/llama-3.1-8b-instruct:free",
-  "qwen/qwen-2.5-7b-instruct",
-  "mistralai/mistral-small-latest"
-];
-
-/* ===== State ===== */
+/* ===== State & Config ===== */
+const EMBEDDED_OR_KEY="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";
+const FALLBACK_MODELS=["google/gemini-flash-1.5","meta-llama/llama-3.1-70b-instruct:free","meta-llama/llama-3.1-8b-instruct:free","qwen/qwen-2.5-7b-instruct","mistralai/mistral-small-latest"];
 const S={level:'A1',scenario:'general',stop:true,speaking:false,history:[],deck:[],lang:localStorage.getItem('lang_key')||'es',currentIndex:0,lastExpected:"",lastEN:"",turn:0,userFacts:{}};
-const cfg={
-  openrouterKey: localStorage.getItem('or_key') || EMBEDDED_OR_KEY,
-  openrouterModel: localStorage.getItem('or_model') || FALLBACK_MODELS[0],
-  groqKey: localStorage.getItem('groq_key') || '',
-  forceRemote: JSON.parse(localStorage.getItem('force_remote') || 'false')
-};
+const cfg={openrouterKey:localStorage.getItem('or_key')||EMBEDDED_OR_KEY,openrouterModel:localStorage.getItem('or_model')||"google/gemini-flash-1.5",groqKey:localStorage.getItem('groq_key')||'',forceRemote:JSON.parse(localStorage.getItem('force_remote')||'false')};
 
 /* ===== UI refs ===== */
 const chatEl=document.getElementById('chat'),statusEl=document.getElementById('status'),llmSourceEl=document.getElementById('llmSource');
 const xpEl=document.getElementById('xp'),xpFill=document.getElementById('xpfill');const levelEl=document.getElementById('level');
-const sayRes=document.getElementById('sayResult'),sayScoreEl=document.getElementById('sayScore');
-const langSelect=document.getElementById('langSelect');
-const forceRemote=document.getElementById('forceRemote');
+const sayRes=document.getElementById('sayResult'),sayScoreEl=document.getElementById('sayScore');const langSelect=document.getElementById('langSelect');const forceRemote=document.getElementById('forceRemote');forceRemote.checked=cfg.forceRemote;
 
 /* ===== Helpers ===== */
 function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
@@ -209,24 +178,16 @@ function logUser(t){const d=document.createElement('div');d.className='bubble me
 function logSys(t){const d=document.createElement('div');d.className='bubble sys';d.textContent=t;chatEl.appendChild(d);scrollChat()}
 function setStatus(t){statusEl.textContent=t}
 
-/* ===== Language Dropdown ===== */
+/* ===== Language dropdown ===== */
 function renderLangSelect(){
   langSelect.innerHTML='';
-  LANGS.forEach(x=>{
-    const opt=document.createElement('option'); opt.value=x.key; opt.textContent=x.label; if(x.key===S.lang) opt.selected=true; langSelect.appendChild(opt);
-  });
-  langSelect.onchange=()=>{
-    S.lang=langSelect.value; localStorage.setItem('lang_key',S.lang);
-    loadDeck(); if(!S.deck.length) seedDeckForLang(S.lang);
-    showCard(0); resetConversation(true);
-  };
+  LANGS.forEach(x=>{const o=document.createElement('option');o.value=x.key;o.textContent=x.label;if(x.key===S.lang)o.selected=true;langSelect.appendChild(o);});
+  langSelect.onchange=()=>{S.lang=langSelect.value;localStorage.setItem('lang_key',S.lang);loadDeck();if(!S.deck.length)seedDeckForLang(S.lang);showCard(0);resetConversation(true);};
 }
 
-/* ===== TTS / Speech ===== */
+/* ===== TTS/STT ===== */
 async function speak(text,code){if(!('speechSynthesis'in window))return;return new Promise(res=>{const u=new SpeechSynthesisUtterance(text);u.lang=code;u.rate=1.0;S.speaking=true;u.onend=()=>{S.speaking=false;res()};u.onerror=()=>{S.speaking=false;res()};try{speechSynthesis.cancel();}catch{}speechSynthesis.speak(u);});}
 function cancelSpeak(){try{speechSynthesis.cancel();}catch{}S.speaking=false}
-
-/* ===== STT ===== */
 function hasBrowserSTT(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition)}
 function newRecognizer(lang){const C=window.SpeechRecognition||window.webkitSpeechRecognition;const r=new C();r.lang=lang;r.interimResults=false;r.maxAlternatives=1;return r}
 async function listenBrowser(lang){return new Promise(resolve=>{if(!hasBrowserSTT()){logSys('Speech recognition not supported in this browser.');return resolve('');}const r=newRecognizer(lang);setStatus('🎙️ listening…');let done=false;const killer=setTimeout(()=>{if(!done){try{r.abort();}catch{}}},16000);r.onresult=e=>{done=true;clearTimeout(killer);setStatus('processing…');resolve(e.results[0]?.[0]?.transcript||'')};r.onerror=()=>{if(!done){done=true;clearTimeout(killer);resolve('')}};r.onend=()=>{if(!done){done=true;clearTimeout(killer);resolve('')}};try{r.start()}catch{resolve('')}})}
@@ -234,60 +195,42 @@ async function recordBlob(ms=8000){if(!navigator.mediaDevices?.getUserMedia)retu
 async function listenGroq(lang){try{const b=await recordBlob(7000);if(!b)return'';const f=new FormData();f.append('file',b,'speech.webm');f.append('model','whisper-large-v3-turbo');f.append('language',(lang||'en-GB').slice(0,2));const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{'Authorization':'Bearer '+cfg.groqKey},body:f});if(!r.ok)throw new Error('groq stt error');const j=await r.json();return j.text||''}catch{return''}}
 async function listen(lang){return cfg.groqKey?await listenGroq(lang):await listenBrowser(lang)}
 
-/* ===== OpenRouter + Local (with diagnostics & fallbacks) ===== */
+/* ===== OpenRouter + Local (with diagnostics & fallback) ===== */
 let webllmEngine=null,webllmReady=false;
-async function initWebLLM(){ if(webllmReady)return; if(!('mlc'in window))throw new Error('WebLLM missing');
-  const cb=(x)=>setStatus('loading: '+(x.text||'')); try{ webllmEngine=await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback:cb}) }catch{ webllmEngine=await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback:cb}) } webllmReady=true; }
-async function wllmChat(messages,max=220){ await initWebLLM(); const out=await webllmEngine.chat.completions.create({messages,temperature:0.7,max_tokens:max,stream:false}); return out.choices?.[0]?.message?.content||'' }
+async function initWebLLM(){if(webllmReady)return;if(!('mlc'in window))throw new Error('WebLLM missing');const cb=(x)=>setStatus('loading: '+(x.text||''));try{webllmEngine=await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback:cb})}catch{webllmEngine=await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback:cb})}webllmReady=true;}
+async function wllmChat(messages,max=220){await initWebLLM();const out=await webllmEngine.chat.completions.create({messages,temperature:0.7,max_tokens:max,stream:false});return out.choices?.[0]?.message?.content||''}
 
 function makeHeaders(){
   const hdr={'Content-Type':'application/json','Authorization':'Bearer '+cfg.openrouterKey,'X-Title':'EuroLingo Tutor'};
-  try{ if(/^https?:\/\//i.test(location.origin)) hdr['HTTP-Referer']=location.origin; }catch{}
+  if(/^https?:\/\//i.test(location.origin)) hdr['HTTP-Referer']=location.origin;
   return hdr;
 }
-async function tryModel(messages, model, max=220){
-  const body={model, messages, temperature:0.7, max_tokens:max};
-  const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-    method:'POST', mode:'cors', credentials:'omit',
-    headers: makeHeaders(),
-    body: JSON.stringify(body)
-  });
+async function tryModel(messages,model,max=220){
+  const body={model,messages,temperature:0.7,max_tokens:max};
+  const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',mode:'cors',credentials:'omit',headers:makeHeaders(),body:JSON.stringify(body)});
   const text=await resp.text();
-  if(!resp.ok){
-    const err=new Error('http-'+resp.status+': '+text.slice(0,280));
-    err.status=resp.status; err.body=text; throw err;
-  }
+  if(!resp.ok){const err=new Error('http-'+resp.status+': '+text.slice(0,280));err.status=resp.status;err.body=text;throw err;}
   const j=JSON.parse(text);
   return (j.choices?.[0]?.message?.content||'').trim();
 }
 async function orChat(messages,max=220){
-  if(!cfg.openrouterKey) throw new Error('no-key');
-  // 1) try configured model
-  try{
-    return await tryModel(messages, cfg.openrouterModel, max);
-  }catch(e){
-    if(String(e.status)!=='404') throw e; // only fallback on 404
-  }
-  // 2) rotate fallbacks
-  let lastErr=null;
+  try{ return await tryModel(messages,cfg.openrouterModel,max); }
+  catch(e){ if(String(e.status)!=='404') throw e; }
+  let last=null;
   for(const m of FALLBACK_MODELS){
-    try{
-      const out=await tryModel(messages, m, max);
-      cfg.openrouterModel=m; localStorage.setItem('or_model',m);
-      const orStatus=document.getElementById('orStatus'); if(orStatus) orStatus.textContent=`Switched to ${m} ✅`;
-      return out;
-    }catch(err){ lastErr=err; }
+    try{const out=await tryModel(messages,m,max); cfg.openrouterModel=m; localStorage.setItem('or_model',m); const st=document.getElementById('orStatus'); if(st) st.textContent=`Switched to ${m} ✅`; return out; }
+    catch(err){ last=err; }
   }
-  throw lastErr||new Error('No working model found');
+  throw last||new Error('No working model found');
 }
 
-/* ===== Conversational Prompt ===== */
+/* ===== Conversational prompt ===== */
 function sysPrompt(){
   return `
 You are "${L().tutor}", a ${L().label} travel tutor. Answer the user's content directly.
 
 FORMAT — EXACTLY TWO LINES:
-${L().tag}: <natural ${L().label}, ≤60 words. Answer what they said; give a tiny inline correction if needed; ask one short, relevant follow-up; vary context. If they asked "how do I say/what does/(local equivalent)", give the ${L().label} phrase first in quotes, then continue. Never start with "Tutor:".>
+${L().tag}: <natural ${L().label}, ≤60 words. Answer what they said; add a tiny inline correction if needed; ask one short, relevant follow-up; vary context. If they asked "how do I say/what does/(local equivalent)", give the ${L().label} phrase first in quotes, then continue. Never start with "Tutor:".>
 EN: <5–15 word English subtitle paraphrasing the ${L().tag} line>
 
 Avoid generic “continue?” prompts unless the user is silent or unclear twice in a row.
@@ -308,7 +251,7 @@ function parseTwo(text){
   return {nat:(lines[0]||"¿Seguimos?"),en:(lines[1]||"Let’s keep going.")};
 }
 
-/* ===== Simple facts to stay on-topic ===== */
+/* ===== Light facts to stay on-topic ===== */
 function updateFactsFromUser(uttr){
   const s=(uttr||'').toLowerCase();
   if(/hotel|hostel|airbnb|check/.test(s)) S.userFacts.context='hotel';
@@ -327,7 +270,7 @@ function heuristic(user,expected){const a=(user||'').normalize('NFD').replace(/[
 async function aiScore(user,expected){try{const sys=`You are a strict ${L().label} pronunciation coach. Return JSON: {"pron":0-100,"accent":0-100,"fluency":0-100,"confidence":0-100,"feedback":"<=15 words"}. Penalise English or wrong language.`;const usr=`LanguageTag=${L().tag}\nTarget="${expected||''}"\nUserSaid="${user||''}"`;const raw=await orChat([{role:'system',content:sys},{role:'user',content:usr}],150);const json=JSON.parse((raw.match(/\{[\s\S]*\}$/)||[raw])[0]);return{pron:norm(json.pron),accent:norm(json.accent),fluency:norm(json.fluency),confidence:norm(json.confidence),feedback:String(json.feedback||'Good effort.').slice(0,60)}}catch{return heuristic(user,expected)}}
 function updMeters(o){bars.pron.style.width=o.pron+'%';tips.pron.textContent=o.feedback||'';bars.accent.style.width=o.accent+'%';tips.accent.textContent=o.accent<55?'Mind stress & vowels.':'Accent improving.';bars.flu.style.width=o.fluency+'%';tips.flu.textContent=o.fluency<55?'Short, complete clauses.':'Good flow.';bars.conf.style.width=o.confidence+'%';tips.conf.textContent=o.confidence<55?'Steady pace, project.':'Confident tone.'}
 
-/* ===== Flashcards (per-language) ===== */
+/* ===== Flashcards (per-language decks) ===== */
 const FC={front:document.getElementById('fcFront'),back:document.getElementById('fcBack'),dueCount:document.getElementById('dueCount'),deckInfo:document.getElementById('deckInfo')};
 function deckKey(){return 'deck_multi_v4_'+S.lang}
 function days(n){return n*86400000}
@@ -355,14 +298,14 @@ function idlePrompt(){const map={es:{nat:'“Perdón, ¿podrías repetirlo?” D
 function baseSystem(){return sysPrompt()+`\nScenario: ${S.scenario}. Known facts: ${JSON.stringify(S.userFacts)}.`}
 function msgs(user){const h=[{role:'system',content:baseSystem()},...S.history.slice(-10)];if(user!=null)h.push({role:'user',content:user});return h}
 
-/* ===== Reply with strict error handling ===== */
+/* ===== Reply (strict errors + badge) ===== */
 async function reply(userText){
   let raw='', used='OpenRouter';
   try{
     raw=await orChat(msgs(userText));
     llmSourceEl.textContent='OpenRouter';
   }catch(e){
-    const msg=(e && e.message)?e.message:'unknown';
+    const msg=(e&&e.message)?e.message:'unknown';
     logSys('OpenRouter failed → '+msg);
     document.getElementById('orStatus').textContent='OpenRouter error: '+msg;
     if(cfg.forceRemote){ throw new Error('remote-required'); }
@@ -371,16 +314,16 @@ async function reply(userText){
     llmSourceEl.textContent='Local';
   }
   let {nat,en}=parseTwo(raw);
-  if((/¿Seguimos|Pick a topic|continue/i.test(nat)||!nat) && userText){
+  if((/¿Seguimos|continue|Pick a topic/i.test(nat)||!nat) && userText){
     const scen=detectScenario(userText);
-    const targeted={restaurant:'“¿Quieres pedir algo en concreto?” ¿Entrada o plato principal?',taxi:'“Te llevo.” ¿Dirección exacta o punto de referencia?',directions:'“Sigue recto, luego a la izquierda.” ¿Qué lugar buscas?',hotel:'“Tengo una reserva.” ¿Check-in ahora o preguntas sobre desayuno?',money:'“¿Puedo pagar con tarjeta?” ¿Presupuesto aproximado?',emergencies:'“Necesito ayuda.” ¿Qué pasó y dónde estás?',social:'“¿Viajas por trabajo o placer?” ¿Cuántos días te quedas?',general:'“Perfecto.” Dame un detalle más y te ayudo.'}[scen];
+    const targeted={restaurant:'“¿Quieres pedir algo concreto?” ¿Entrada o plato principal?',taxi:'“Te llevo.” ¿Dirección exacta o punto de referencia?',directions:'“Sigue recto y gira a la izquierda.” ¿Qué lugar buscas?',hotel:'“Tengo una reserva.” ¿Check-in ahora o dudas sobre desayuno?',money:'“¿Puedo pagar con tarjeta?” ¿Cuál es tu presupuesto?',emergencies:'“Necesito ayuda.” ¿Qué pasó y dónde estás?',social:'“¿Viajas por trabajo o placer?” ¿Cuántos días te quedas?',general:'“Perfecto.” Dame un detalle y te ayudo.'}[scen];
     if(targeted){nat=targeted;en='Okay—let’s handle what you just said.'}
   }
   return {nat,en,used};
 }
 
 /* ===== Turn handling ===== */
-let listening=false, unclearCount=0;
+let listening=false,unclearCount=0;
 async function safeListen(lang,timeoutMs=12000){listening=true;setStatus('🎙️ listening…');const timer=new Promise(r=>setTimeout(()=>r('__TIMEOUT__'),timeoutMs));const heard=await Promise.race([listen(lang),timer]);listening=false;return heard==='__TIMEOUT__'?'':heard}
 async function handleTurn(text){
   if(!text){
@@ -395,12 +338,8 @@ async function handleTurn(text){
   logUser(text); S.scenario=detectScenario(text); updateFactsFromUser(text);
   setStatus('thinking…');
   let out;
-  try{
-    out=await reply(text);
-  }catch(e){
-    setStatus('OpenRouter required — fix key/origin/model and press Start');
-    return;
-  }
+  try{ out=await reply(text); }
+  catch(e){ setStatus('OpenRouter required — fix key/model and press Start'); return; }
   const {nat,en}=out;
   logAssistant(nat,en); S.lastExpected=nat; S.lastEN=en;
   setStatus('speaking…'); await speak(nat,L().tts); setStatus('ready');
@@ -432,57 +371,24 @@ function resetConversation(notify){S.stop=true;S.history=[];S.scenario='general'
 document.getElementById('startBtn').onclick=()=>{setStatus('starting…');start()}
 document.getElementById('stopBtn').onclick=()=>stopAll()
 document.getElementById('interruptBtn').onclick=()=>{cancelSpeak();setStatus('interrupted → listening')}
-
-document.getElementById('saveOR').onclick=()=>{
-  const k=(document.getElementById('orKey').value||'').trim();
-  const m=(document.getElementById('orModel').value||'').trim();
-  if(k) cfg.openrouterKey=k;
-  if(m) cfg.openrouterModel=m;
-  cfg.forceRemote=!!document.getElementById('forceRemote').checked;
-  localStorage.setItem('or_key',cfg.openrouterKey);
-  localStorage.setItem('or_model',cfg.openrouterModel);
-  localStorage.setItem('force_remote',JSON.stringify(cfg.forceRemote));
-  document.getElementById('orStatus').textContent='Saved.';
-}
-document.getElementById('testOR').onclick=async()=>{
-  const el=document.getElementById('orStatus');
-  el.textContent='Testing…';
-  try{
-    const ok=await orChat([{role:'system',content:'Say "OK" only.'},{role:'user',content:'Respond.'}],6);
-    el.textContent=`OpenRouter OK ✅ (model: ${cfg.openrouterModel})`;
-    llmSourceEl.textContent='OpenRouter';
-  }catch(e){
-    el.textContent='OpenRouter error ❌ ('+(e.message||'unknown')+')';
-    llmSourceEl.textContent='—';
-  }
-}
-document.getElementById('saveGroq').onclick=()=>{
-  cfg.groqKey=(document.getElementById('groqKey').value||'').trim();
-  localStorage.setItem('groq_key',cfg.groqKey);
-  document.getElementById('groqStatus').textContent=cfg.groqKey?'STT via Groq Whisper':'STT via browser'
-}
+document.getElementById('saveOR').onclick=()=>{const k=(document.getElementById('orKey').value||'').trim();const m=(document.getElementById('orModel').value||'').trim();if(k)cfg.openrouterKey=k;cfg.openrouterModel=m||cfg.openrouterModel;cfg.forceRemote=!!forceRemote.checked;localStorage.setItem('or_key',cfg.openrouterKey);localStorage.setItem('or_model',cfg.openrouterModel);localStorage.setItem('force_remote',JSON.stringify(cfg.forceRemote));document.getElementById('orStatus').textContent='Saved.'}
+document.getElementById('testOR').onclick=async()=>{document.getElementById('orStatus').textContent='Testing…';try{const ok=await orChat([{role:'system',content:'Say "OK" only.'},{role:'user',content:'Respond.'}],6);document.getElementById('orStatus').textContent=`OpenRouter OK ✅ (model: ${cfg.openrouterModel})`;llmSourceEl.textContent='OpenRouter';}catch(e){document.getElementById('orStatus').textContent='OpenRouter error ❌ ('+(e.message||'unknown')+')';llmSourceEl.textContent='—';}}
+document.getElementById('saveGroq').onclick=()=>{cfg.groqKey=(document.getElementById('groqKey').value||'').trim();localStorage.setItem('groq_key',cfg.groqKey);document.getElementById('groqStatus').textContent=cfg.groqKey?'STT via Groq Whisper':'STT via browser'}
 
 /* ===== Seeding per-language ===== */
 function seedDeckForLang(lang){
-  const seed={es:[["A table for two, please","Una mesa para dos, por favor","restaurant"],["Where is the metro?","¿Dónde está el metro?","directions"],["The bill, please","La cuenta, por favor","restaurant"]],
-              de:[["To the airport, please","Zum Flughafen, bitte.","taxi"],["Where is the metro?","Wo ist die U-Bahn?","directions"],["The bill, please","Die Rechnung, bitte.","restaurant"]],
-              fr:[["Where is the metro?","Où est le métro ?","directions"],["Do you take card?","Je peux payer par carte ?","money"],["The bill, please","L’addition, s’il vous plaît.","restaurant"]]}[lang]
-              || [["A table for two, please","Una mesa para dos, por favor","restaurant"]];
+  const seed={es:[["A table for two, please","Una mesa para dos, por favor","restaurant"],["Where is the metro?","¿Dónde está el metro?","directions"],["The bill, please","La cuenta, por favor","restaurant"]],de:[["To the airport, please","Zum Flughafen, bitte.","taxi"],["Where is the metro?","Wo ist die U-Bahn?","directions"],["The bill, please","Die Rechnung, bitte.","restaurant"]],fr:[["Where is the metro?","Où est le métro ?","directions"],["Do you take card?","Je peux payer par carte ?","money"],["The bill, please","L’addition, s’il vous plaît.","restaurant"]]}[lang]||[["A table for two, please","Una mesa para dos, por favor","restaurant"]];
   S.deck=[]; seed.forEach(([en,native,mod])=>S.deck.push(newCard(en,native,mod))); saveDeck();
 }
 
 /* ===== Init ===== */
 (function init(){
-  // Prefill settings UI
-  document.getElementById('orKey').value = cfg.openrouterKey;
-  document.getElementById('orModel').value = cfg.openrouterModel;
-  document.getElementById('forceRemote').checked = cfg.forceRemote;
-
   renderLangSelect();
-  document.getElementById('streak').textContent='0';document.getElementById('combo').textContent='x1';document.getElementById('xp').textContent='0';levelEl.textContent=S.level;
-
+  document.getElementById('streak').textContent='0';document.getElementById('combo').textContent='x1';xpEl.textContent='0';levelEl.textContent=S.level;
   loadDeck(); if(!S.deck.length) seedDeckForLang(S.lang); showCard(0);
-  logSys("Tip: serve over https or localhost. Test to confirm OpenRouter; badge shows the active engine.");
+  // sync model input with the active model
+  const modelEl=document.getElementById('orModel'); if(modelEl) modelEl.value=cfg.openrouterModel;
+  logSys("Ready on GitHub Pages. Save your OpenRouter key, Test, then Start. The badge shows which engine replies.");
 })();
 </script>
 </body>

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>EuroLingo — Multilingual Voice Tutor (OpenRouter + WebLLM Fallback)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0a0f1d;--panel:#0f172a;--text:#e6eef8;--muted:#9fb0c7;--accent:#22d3ee;--danger:#ef4444;--border:#1e293b;--chip:#152338}
+  *{box-sizing:border-box} html,body{margin:0;background:linear-gradient(180deg,#080c19,#0c1224 30%,#0b1220);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  header{position:sticky;top:0;z-index:10;background:rgba(10,15,29,.75);backdrop-filter:blur(10px) saturate(140%);border-bottom:1px solid var(--border)}
+  .wrap{max-width:1200px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:18px}
+  .pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid #233047;border-radius:999px;background:#0b1220;color:var(--muted)}
+  .xpbar{width:140px;height:8px;border-radius:999px;background:#0b1327;overflow:hidden;border:1px solid #16233a}
+  .xpbar>div{height:100%;background:linear-gradient(90deg,var(--accent),#38bdf8);width:0}
+  main{max-width:1200px;margin:12px auto;padding:0 16px;display:grid;grid-template-columns:1fr;gap:12px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .pad{padding:12px} .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:var(--text);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  .primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#01151a;font-weight:800}
+  .danger{background:var(--danger)} .muted{color:var(--muted)} input{background:#0b1220;border:1px solid #24324c;color:var(--text);border-radius:10px;padding:8px 10px}
+
+  /* Language bar */
+  .langbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0b142a,#0d1733)}
+  .langbtn{padding:6px 10px;border-radius:999px;border:1px solid #284065;background:#0b1220;cursor:pointer}
+  .langbtn.active{background:linear-gradient(90deg,#22d3ee,#60a5fa);color:#042d37;border-color:#2d6a87;font-weight:800}
+
+  /* Chat */
+  .chat{display:grid;grid-template-rows:auto 1fr auto;min-height:48vh;border-radius:16px;overflow:hidden}
+  .chat .top{padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0b142a,#0d1733)}
+  .chat .mid{background:#081023;overflow:auto;padding:12px}
+  .bubble{max-width:86%;margin:8px 0;padding:10px 12px;border-radius:14px;border:1px solid #1b2a44;background:#0d1530}
+  .me{background:#132039;border-color:#253b61;margin-left:auto}
+  .sys{background:#112;color:#b8c1d6;font-style:italic}
+  .subtitle{font-size:.9em;color:#b8cbe3;margin-top:4px;opacity:.95}
+  .badge{background:linear-gradient(90deg,#111b36,#182646);border:1px solid #263a62;padding:6px 10px;border-radius:999px;font-size:.9em}
+  .lvl{font-weight:800;color:#c7e7ff}
+
+  /* Meters */
+  .meters{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:10px}
+  @media(min-width:780px){.meters{grid-template-columns:repeat(4,1fr)}}
+  .meter{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:10px}
+  .meter h4{margin:0 0 6px 0;font-size:12px}
+  .bar{height:8px;border-radius:8px;background:#091528;border:1px solid #163054;overflow:hidden}
+  .bar>div{height:100%;background:linear-gradient(90deg,#34d399,#22c55e);width:0}
+  .coach{font-size:.85em;color:var(--muted);margin-top:6px}
+
+  /* Flashcards */
+  .deck .title{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .flash{padding:12px;display:grid;gap:8px}
+  .card{min-height:110px;border:1px dashed #2a3a5c;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.05em;background:#09142b}
+  .back{display:none} .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:#152338;border:1px solid #1e2e4f;padding:6px 10px;border-radius:999px;color:#c8d7ef;font-size:.9em}
+
+  /* Settings */
+  .settings{padding:10px;border-top:1px dashed #20314f;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .section{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+<script defer src="https://unpkg.com/@mlc-ai/web-llm@0.2.58/dist/index.js"></script>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🌍 EuroLingo — Multilingual Voice Tutor</h1>
+    <div class="row">
+      <span class="pill">Streak: <b id="streak">0</b> 🔥 • Combo: <b id="combo">x1</b></span>
+      <div class="xpbar"><div id="xpfill"></div></div>
+      <span class="pill"><b id="xp">0</b> XP</span>
+    </div>
+  </div>
+  <div id="langbar" class="wrap langbar"></div>
+</header>
+
+<main>
+  <!-- Chat -->
+  <section class="panel chat">
+    <div class="top">
+      <div class="row">
+        <button id="startBtn" class="primary">▶️ Start</button>
+        <button id="stopBtn" class="danger">⏹️ Stop</button>
+        <span id="status" class="pill">idle</span>
+        <span class="pill" style="margin-left:auto">Level: <b id="level" class="lvl">A1</b></span>
+      </div>
+      <div class="muted" style="margin-top:6px">
+        Speaks your chosen language with a short English subtitle. Say anything—auto-detects the situation and keeps role-playing.
+      </div>
+    </div>
+    <div id="chat" class="mid" aria-live="polite"></div>
+    <div class="pad">
+      <div class="row">
+        <span class="badge">Focus: <b id="focusTag">—</b></span>
+        <span class="badge">Weakest: <b id="weakTag">—</b></span>
+        <span class="badge">Correct Streak: <b id="corrStreak">0</b></span>
+      </div>
+    </div>
+    <!-- Settings -->
+    <div class="settings">
+      <div class="section">
+        <b>OpenRouter</b>
+        <input id="orKey" type="password" placeholder="OpenRouter API key (free models)"/>
+        <input id="orModel" value="meta-llama/llama-3.2-11b-vision-instruct:free" size="42"/>
+        <button id="saveOR" class="pill">Save</button>
+        <span id="orStatus" class="muted"></span>
+      </div>
+      <div class="section">
+        <b>Speech (optional)</b>
+        <input id="groqKey" type="password" placeholder="Groq API key for Whisper STT"/>
+        <button id="saveGroq" class="pill">Save</button>
+        <span id="groqStatus" class="muted"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Meters -->
+  <section class="panel">
+    <div class="meters">
+      <div class="meter"><h4>Pronunciation</h4><div class="bar"><div id="pronBar"></div></div><div class="coach" id="pronTip">Open vowels clearly.</div></div>
+      <div class="meter"><h4>Accent</h4><div class="bar"><div id="accentBar"></div></div><div class="coach" id="accentTip">Consistent word stress.</div></div>
+      <div class="meter"><h4>Fluency</h4><div class="bar"><div id="fluencyBar"></div></div><div class="coach" id="fluencyTip">Short, complete sentences.</div></div>
+      <div class="meter"><h4>Confidence</h4><div class="bar"><div id="confBar"></div></div><div class="coach" id="confTip">Calm pace, clear voice.</div></div>
+    </div>
+  </section>
+
+  <!-- Flashcards -->
+  <section class="panel deck">
+    <div class="title">
+      <span>🃏 Adaptive Flashcards (auto-adds from tutor quotes)</span>
+      <span class="pill" style="margin-left:auto">Due: <b id="dueCount">0</b></span>
+    </div>
+    <div class="flash">
+      <div id="fcFront" class="card front"></div>
+      <div id="fcBack" class="card back"></div>
+      <div class="controls">
+        <button id="showCard" class="pill">Show</button>
+        <button id="again" class="pill">Again</button>
+        <button id="hard" class="pill">Hard</button>
+        <button id="good" class="pill">Good</button>
+        <button id="easy" class="primary">Easy</button>
+        <span class="chip" id="deckInfo">Module: —</span>
+        <button id="speakCard" class="pill">🔊 Say it</button>
+        <button id="sayCard" class="pill">🎤 I’ll say it</button>
+        <span id="sayResult" class="muted"></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ========================= Language catalog ========================= */
+const LANGS = [
+  {key:'es', label:'Español',  tts:'es-ES', stt:'es-ES', tag:'ES', tutor:'Profe de Viaje'},
+  {key:'de', label:'Deutsch',  tts:'de-DE', stt:'de-DE', tag:'DE', tutor:'Reisecoach'},
+  {key:'fr', label:'Français', tts:'fr-FR', stt:'fr-FR', tag:'FR', tutor:'Coach de voyage'},
+  {key:'it', label:'Italiano', tts:'it-IT', stt:'it-IT', tag:'IT', tutor:'Coach di viaggio'},
+  {key:'pt', label:'Português',tts:'pt-PT', stt:'pt-PT', tag:'PT', tutor:'Treinador de viagem'},
+  {key:'pl', label:'Polski',   tts:'pl-PL', stt:'pl-PL', tag:'PL', tutor:'Trener podróży'},
+  {key:'lt', label:'Lietuvių', tts:'lt-LT', stt:'lt-LT', tag:'LT', tutor:'Kelionių treneris'},
+  {key:'nl', label:'Nederlands',tts:'nl-NL',stt:'nl-NL', tag:'NL', tutor:'Reiscoach'},
+  {key:'sv', label:'Svenska',  tts:'sv-SE', stt:'sv-SE', tag:'SV', tutor:'Resecoach'},
+  {key:'da', label:'Dansk',    tts:'da-DK', stt:'da-DK', tag:'DA', tutor:'Rejsecoach'},
+  {key:'nb', label:'Norsk',    tts:'nb-NO', stt:'nb-NO', tag:'NO', tutor:'Reisecoach'},
+  {key:'fi', label:'Suomi',    tts:'fi-FI', stt:'fi-FI', tag:'FI', tutor:'Matkavalmentaja'},
+  {key:'el', label:'Ελληνικά', tts:'el-GR', stt:'el-GR', tag:'EL', tutor:'Προπονητής ταξιδιού'},
+  {key:'cs', label:'Čeština',  tts:'cs-CZ', stt:'cs-CZ', tag:'CS', tutor:'Trenér cestování'},
+  {key:'hu', label:'Magyar',   tts:'hu-HU', stt:'hu-HU', tag:'HU', tutor:'Utazási edző'},
+  {key:'ro', label:'Română',   tts:'ro-RO', stt:'ro-RO', tag:'RO', tutor:'Antrenor de călătorie'},
+  {key:'bg', label:'Български',tts:'bg-BG', stt:'bg-BG', tag:'BG', tutor:'Треньор по пътувания'},
+];
+
+/* ========================= State ========================= */
+const S = {
+  level:'A1', scenario:'general',
+  stop:true, speaking:false,
+  xp:0, combo:1, corrStreak:0,
+  history:[], memory:"",
+  deck: JSON.parse(localStorage.getItem('deck_multi_v1')||'[]'),
+  lang: localStorage.getItem('lang_key') || 'es'
+};
+const cfg = {
+  openrouterKey: localStorage.getItem('or_key')||'',
+  openrouterModel: localStorage.getItem('or_model')||'meta-llama/llama-3.2-11b-vision-instruct:free',
+  groqKey: localStorage.getItem('groq_key')||''
+};
+
+/* ========================= UI wiring ========================= */
+const chatEl=document.getElementById('chat'), statusEl=document.getElementById('status');
+const xpEl=document.getElementById('xp'), xpFill=document.getElementById('xpfill');
+const levelEl=document.getElementById('level');
+
+function esc(s){return s.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
+function logAssistant(native,en){
+  const d=document.createElement('div'); d.className='bubble';
+  d.innerHTML=`<strong>Tutor:</strong> ${esc(native)}<div class="subtitle">EN: ${esc(en)}</div>`;
+  chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight;
+}
+function logUser(t){ const d=document.createElement('div'); d.className='bubble me'; d.innerHTML=`<strong>You:</strong> ${esc(t)}`; chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight; }
+function logSys(t){ const d=document.createElement('div'); d.className='bubble sys'; d.textContent=t; chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight; }
+function setStatus(t){ statusEl.textContent=t; }
+function addXP(n){ S.xp+=n; xpEl.textContent=S.xp; xpFill.style.width=(S.xp%100)+'%'; }
+
+function currentLang(){ return LANGS.find(l=>l.key===S.lang) || LANGS[0]; }
+
+/* ========================= Language bar ========================= */
+const bar = document.getElementById('langbar');
+function renderLangBar(){
+  bar.innerHTML='';
+  LANGS.forEach(l=>{
+    const b=document.createElement('button'); b.className='langbtn'+(l.key===S.lang?' active':''); b.textContent=l.label;
+    b.onclick=()=>{ S.lang=l.key; localStorage.setItem('lang_key',S.lang); renderLangBar(); resetConversation(true); };
+    bar.appendChild(b);
+  });
+}
+
+/* ========================= TTS ========================= */
+async function speak(text, langCode){ if(!('speechSynthesis' in window)) return; return new Promise(res=>{ const u=new SpeechSynthesisUtterance(text); u.lang=langCode; u.rate=1.0; u.onend=()=>res(); try{speechSynthesis.cancel();}catch{} speechSynthesis.speak(u); }); }
+
+/* ========================= STT: Browser or Groq Whisper (optional) ========================= */
+async function listenBrowser(lang){ return new Promise(resolve=>{ const Rec=window.webkitSpeechRecognition; if(!Rec){ logSys('Speech recognition not supported.'); return resolve(''); } const r=new Rec(); r.lang=lang; r.interimResults=false; r.maxAlternatives=1; setStatus('🎙️ listening…'); let done=false; const killer=setTimeout(()=>{ if(!done){ try{r.abort();}catch{} } },16000); r.onresult=e=>{done=true; clearTimeout(killer); setStatus('processing…'); resolve(e.results[0]?.[0]?.transcript||'');}; r.onerror=()=>{if(!done){done=true;clearTimeout(killer);resolve('');}}; r.onend=()=>{if(!done){done=true;clearTimeout(killer);resolve('');}}; try{r.start();}catch{resolve('');} }); }
+async function recordBlob(ms=8000){
+  if(!navigator.mediaDevices?.getUserMedia) return null;
+  const stream = await navigator.mediaDevices.getUserMedia({audio:true}); const rec=new MediaRecorder(stream,{mimeType:'audio/webm'});
+  const chunks=[]; rec.ondataavailable=e=>{ if(e.data.size>0) chunks.push(e.data); };
+  const stopped = new Promise(r=>{ rec.onstop=()=>r(); });
+  rec.start(); setStatus('🎙️ listening…'); await new Promise(r=>setTimeout(r,ms)); rec.stop(); await stopped; stream.getTracks().forEach(t=>t.stop());
+  return new Blob(chunks,{type:'audio/webm'});
+}
+async function listenGroq(lang){
+  try{
+    const blob = await recordBlob(7000); if(!blob) return '';
+    const form = new FormData(); form.append('file', blob, 'speech.webm'); form.append('model','whisper-large-v3-turbo'); form.append('language', (lang||'en-GB').slice(0,2));
+    const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{ method:'POST', headers:{'Authorization':'Bearer '+cfg.groqKey}, body:form });
+    if(!r.ok) throw new Error('groq stt error'); const j = await r.json(); return j.text || '';
+  }catch{ return ''; }
+}
+async function listen(lang){ if(cfg.groqKey) return await listenGroq(lang); return await listenBrowser(lang); }
+
+/* ========================= Conversation engines: OpenRouter → WebLLM fallback ========================= */
+const orKeyEl=document.getElementById('orKey'), orModelEl=document.getElementById('orModel');
+const groqEl=document.getElementById('groqKey');
+orKeyEl.value = cfg.openrouterKey; orModelEl.value = cfg.openrouterModel; groqEl.value = cfg.groqKey;
+
+async function chatOpenRouter(history){
+  const body = { model: cfg.openrouterModel, messages: history, temperature: 0.6, max_tokens: 220 };
+  const r = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openrouterKey,'HTTP-Referer': location.origin,'X-Title':'EuroLingo Tutor'},
+    body: JSON.stringify(body)
+  });
+  if(!r.ok) throw new Error('openrouter error');
+  const j = await r.json(); return (j.choices?.[0]?.message?.content||'').trim();
+}
+
+let webllmEngine=null, webllmReady=false;
+async function initWebLLM(){
+  if(webllmReady) return;
+  if(!('mlc' in window)) throw new Error('WebLLM missing');
+  const initProgressCallback=(r)=> setStatus('loading: '+(r.text||''));
+  try{
+    webllmEngine = await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback});
+  }catch{
+    webllmEngine = await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback});
+  }
+  webllmReady=true; setStatus('model ready (local)');
+}
+async function chatWebLLM(history){
+  await initWebLLM();
+  const out = await webllmEngine.chat.completions.create({messages: history, temperature:0.6, max_tokens:200, stream:false});
+  return out.choices?.[0]?.message?.content || '';
+}
+
+/* ========================= System prompt builder ========================= */
+function sysPrompt(){
+  const L = currentLang();
+  const TAG = L.tag; // e.g., ES / DE / FR …
+  const coach = L.tutor;
+  return `
+You are "${coach}", a ${L.label} travel tutor. ALWAYS reply as two lines:
+${TAG}: <natural ${L.label}, ≤60 words, include 1 follow-up question, correct gently if needed; if asked “how do I say…/what does…?/(${L.key==='pl'?'Co znaczy…?':L.key==='lt'?'Ką reiškia…?':'¿Qué significa…?/Was bedeutet…?/Que veut dire…?/Co znaczy…?/Ką reiškia…?'})”, GIVE the ${L.label} phrase first, then continue.>
+EN: <very short English subtitle (5–15 words) matching the ${TAG} line>
+Stay in character (restaurant/taxi/directions/hotel/money/emergencies/social) inferred from the user. Keep it friendly and fluid.
+`.trim();
+}
+
+function parseTwoLines(text){
+  const TAG = currentLang().tag;
+  const m1 = new RegExp("^\\s*" + TAG + ":\\s*(.+)$","im").exec(text);
+  const m2 = /^\s*EN:\s*(.+)$/im.exec(text);
+  if(m1&&m2) return {nat:m1[1].trim(), en:m2[1].trim()};
+  const lines = (text||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  return {nat: lines[0]||'Entendido.', en: lines[1]||'Understood.'};
+}
+
+/* ========================= Helpers ========================= */
+function detectScenario(t){
+  const s=t.toLowerCase();
+  if(/resta|menu|camar|rechnung|tisch|menu|garçon|bill|mesa|menú|speisekarte|kellner/.test(s)) return 'restaurant';
+  if(/taxi|airport|aeropuerto|flughafen|aéroport|gare|station|metro|bus|train|ubahn|u-bahn/.test(s)) return 'taxi';
+  if(/direc|left|right|straight|izquierda|derecha|gauche|droite|links|rechts|geradeaus|wo ist/.test(s)) return 'directions';
+  if(/hotel|room|check|llave|schlüssel|clé|frühstück|desayuno/.test(s)) return 'hotel';
+  if(/money|euros?|price|precio|wie viel|combien|tarjeta|efectivo|cash/.test(s)) return 'money';
+  if(/help|ayuda|hilfe|police|polizei|ambulance|apotheke|farmacia|emergen/.test(s)) return 'emergencies';
+  if(/friend|foto|recommend|recomienda|empfehl|social|smalltalk|charla/.test(s)) return 'social';
+  return S.scenario||'restaurant';
+}
+const bars={pron:document.getElementById('pronBar'),accent:document.getElementById('accentBar'),flu:document.getElementById('fluencyBar'),conf:document.getElementById('confBar')};
+const tips={pron:document.getElementById('pronTip'),accent:document.getElementById('accentTip'),flu:document.getElementById('fluencyTip'),conf:document.getElementById('confTip')};
+function norm(n){return Math.max(0,Math.min(100,Math.round(n))); }
+function jaccard(a,b){ a=a.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); b=b.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); const A=new Set(a.split('')); const B=new Set(b.split('')); const inter=[...A].filter(x=>B.has(x)).length; const uni=new Set([...A,...B]).size; return uni?inter/uni:0; }
+function scriptness(t){ return /[ñáéíóúüäöüßàâçéèêëîïôûùėįąęłńćźżșțăίάέήώϊϋά-ώа-яА-Я]/i.test(t)?1:(/[a-z]/i.test(t)?0.6:0.4); }
+function updateMeters(userText){ const base = S.lastExpectedPhrase? jaccard(userText,S.lastExpectedPhrase): scriptness(userText);
+  const pron=norm(40+60*base), words=userText.trim().split(/\s+/).filter(Boolean).length;
+  const flu=norm(35+Math.min(65,words*4)), accent=norm(35+65*scriptness(userText)), conf=norm(30+70*Math.min(1,userText.length/40));
+  bars.pron.style.width=pron+'%'; tips.pron.textContent= pron<55?"Articulate clearly.":"Nice clarity!";
+  bars.flu.style.width=flu+'%'; tips.flu.textContent= flu<55?"Shorter sentences help.":"Good flow!";
+  bars.accent.style.width=accent+'%'; tips.accent.textContent= accent<55?"Consistent stress helps.":"Rhythm improving.";
+  bars.conf.style.width=conf+'%'; tips.conf.textContent= conf<55?"Steady pace, project.":"Confident tone.";
+}
+
+/* ========================= Flashcards (SRS) ========================= */
+const FC={front:document.getElementById('fcFront'),back:document.getElementById('fcBack'),dueCount:document.getElementById('dueCount'),deckInfo:document.getElementById('deckInfo'),sayRes:document.getElementById('sayResult')};
+function days(n){return n*24*60*60*1000} function saveDeck(){ localStorage.setItem('deck_multi_v1', JSON.stringify(S.deck)); }
+function newCard(front,back,module){return {id:(module||'focus')+'::'+back,front,back,ease:2.5,interval:0,due:Date.now(),reps:0,lapses:0,module:module||'focus'}}
+function reviewCard(c,g){const n={...c}; if(g===0){n.lapses++;n.interval=0;n.ease=Math.max(1.3,n.ease-0.2);n.due=Date.now()+days(0.04);} else {if(n.interval===0)n.interval=(g===3?3:1); else if(n.interval===1)n.interval=(g===3?6:3); else n.interval=Math.round(n.interval*(n.ease)*(g===1?0.7:1)); n.ease=Math.max(1.3,n.ease+(g===3?0.15:(g===1?-0.05:0.05))); n.due=Date.now()+days(n.interval);} n.reps++; return n;}
+function addToDeck(front,back,module){ if(!front||!back) return; if(S.deck.find(d=>d.id===(module||'focus')+'::'+back)) return; S.deck.push(newCard(front,back,module)); saveDeck(); }
+function nextDue(){ const due=S.deck.filter(c=>c.due<=Date.now()); const pool=due.length?due:S.deck;
+  if(!pool.length){ FC.front.textContent="No cards yet. I’ll add tricky phrases here automatically."; FC.back.style.display='none'; FC.front.style.display='flex'; FC.dueCount.textContent='0'; FC.deckInfo.textContent='Module: —'; return; }
+  const c=pool.sort((a,b)=> (b.lapses-a.lapses) || (a.interval-b.interval))[0]; S.currentCard=c;
+  FC.front.textContent=c.front; FC.back.textContent=c.back; FC.front.style.display='flex'; FC.back.style.display='none'; FC.dueCount.textContent=String(due.length); FC.deckInfo.textContent='Module: '+(c.module||'focus'); S.lastExpectedPhrase=c.back;
+}
+document.getElementById('showCard').onclick=()=>{ if(!S.currentCard) return; FC.front.style.display='none'; FC.back.style.display='flex'; };
+function gradeCard(g){ if(!S.currentCard) return; const i=S.deck.findIndex(x=>x.id===S.currentCard.id); S.deck[i]=reviewCard(S.currentCard,g); saveDeck(); nextDue(); addXP(g>=2?8:2); }
+document.getElementById('again').onclick=()=>gradeCard(0); document.getElementById('hard').onclick=()=>gradeCard(1); document.getElementById('good').onclick=()=>gradeCard(2); document.getElementById('easy').onclick=()=>gradeCard(3);
+document.getElementById('speakCard').onclick=()=>{ if(S.currentCard) speak(S.currentCard.back, currentLang().tts); };
+document.getElementById('sayCard').onclick=async()=>{ if(!S.currentCard) return; const heard=await listen(currentLang().tts); FC.sayRes.textContent=heard?('You said: '+heard):''; if(heard){ const sim=jaccard(heard,S.currentCard.back); gradeCard(sim>0.7?3:0); updateMeters(heard);} };
+
+/* ========================= Conversation Loop ========================= */
+function baseSystem(){ return sysPrompt() + `\nCurrent scenario: ${S.scenario}. Keep it friendly and fluid.`; }
+function buildMessages(userText){ const msgs=[{role:'system',content:baseSystem()},...S.history.slice(-10)]; if(userText!=null) msgs.push({role:'user',content:userText}); return msgs; }
+
+async function converse(userText){
+  let raw=''; try{ raw = cfg.openrouterKey ? await chatOpenRouter(buildMessages(userText)) : await chatWebLLM(buildMessages(userText)); }catch{ raw=''; }
+  const {nat,en} = parseTwoLines(raw||'');
+  return {nat,en};
+}
+
+function harvestPhrase(nativeText){
+  // try to capture quoted phrase in any quotation style
+  const m = nativeText.match(/[“”"„«»‚‘’‹›「」『』]([^“”"„«»‚‘’‹›「」『』]+)[“”"„«»‚‘’‹›」』]/);
+  const phrase=(m?.[1]||'').trim();
+  if(phrase) addToDeck("Say:", phrase, S.scenario);
+}
+
+async function start(){
+  if(!S.stop) return; S.stop=false; levelEl.textContent=S.level;
+  const L=currentLang();
+  const greet = {
+    es:"Hola, soy tu profe de viaje. ¿Qué situación practicamos: restaurante, taxi, direcciones, hotel, dinero, emergencias o social?",
+    de:"Hallo, ich bin dein Reisecoach. Welche Situation üben wir: Restaurant, Taxi, Wegbeschreibung, Hotel, Geld, Notfälle oder Smalltalk?",
+    fr:"Salut, je suis ton coach de voyage. On pratique quoi: restaurant, taxi, directions, hôtel, argent, urgences ou social?",
+    it:"Ciao, sono il tuo coach di viaggio. Che situazione proviamo: ristorante, taxi, indicazioni, hotel, soldi, emergenze o sociale?",
+    pt:"Olá, sou o seu treinador de viagem. Qual situação praticamos: restaurante, táxi, direções, hotel, dinheiro, emergências ou social?",
+    pl:"Cześć, jestem twoim trenerem podróży. Co ćwiczymy: restauracja, taksówka, wskazówki, hotel, pieniądze, nagłe wypadki czy rozmowa?",
+    lt:"Sveikas, aš tavo kelionių treneris. Ką treniruojame: restoraną, taksi, kryptis, viešbutį, pinigus, skubius atvejus ar pokalbį?",
+    nl:"Hoi, ik ben je reiscoach. Wat oefenen we: restaurant, taxi, route, hotel, geld, noodgevallen of sociaal?",
+    sv:"Hej, jag är din resecoach. Vad övar vi: restaurang, taxi, vägbeskrivning, hotell, pengar, nödfall eller socialt?",
+    da:"Hej, jeg er din rejsecoach. Hvad øver vi: restaurant, taxi, vejvisning, hotel, penge, nødsituationer eller socialt?",
+    nb:"Hei, jeg er din reisecoach. Hva øver vi: restaurant, taxi, veibeskrivelse, hotell, penger, nødstilfeller eller sosialt?",
+    fi:"Hei, olen matkavalmentajasi. Mitä harjoitellaan: ravintola, taksi, reitit, hotelli, raha, hätätilanteet vai small talk?",
+    el:"Γεια, είμαι ο προπονητής ταξιδιού σου. Τι εξασκούμε: εστιατόριο, ταξί, οδηγίες, ξενοδοχείο, χρήματα, επείγοντα ή κουβέντα;",
+    cs:"Ahoj, jsem tvůj trenér cestování. Co budeme trénovat: restaurace, taxi, navigace, hotel, peníze, pohotovost nebo konverzace?",
+    hu:"Szia, az utazási edződ vagyok. Mit gyakoroljunk: étterem, taxi, útbaigazítás, hotel, pénz, vészhelyzet vagy társalgás?",
+    ro:"Salut, sunt antrenorul tău de călătorie. Ce exersăm: restaurant, taxi, indicații, hotel, bani, urgențe sau social?",
+    bg:"Здрасти, аз съм твоят треньор по пътувания. Какво упражняваме: ресторант, такси, указания, хотел, пари, спешни случаи или разговор?"
+  }[L.key] || "Hola, empecemos. ¿Qué situación quieres practicar?";
+  logAssistant(greet,"Hi! Which situation do you want to practice?"); await speak(greet, L.tts);
+
+  while(!S.stop){
+    const heard = await listen(S.level==='A1'?'en-GB':L.stt); if(S.stop) break; if(!heard) continue;
+    logUser(heard); S.scenario = detectScenario(heard); updateMeters(heard);
+    const {nat,en} = await converse(heard);
+    logAssistant(nat,en); await speak(nat, L.tts);
+    S.history.push({role:'user',content:heard}); S.history.push({role:'assistant',content:`${L.tag}: ${nat}\nEN: ${en}`});
+    harvestPhrase(nat); addXP(6);
+  }
+}
+function stopAll(){ S.stop=true; try{speechSynthesis.cancel();}catch{} setStatus('stopped'); }
+function resetConversation(notify=false){ S.stop=true; S.history=[]; S.scenario='general'; if(notify){ logSys(`Language set to ${currentLang().label}. Press Start.`);} }
+
+/* ========================= Wire-up ========================= */
+document.getElementById('startBtn').onclick=()=>{ setStatus('starting…'); start(); };
+document.getElementById('stopBtn').onclick=()=> stopAll();
+document.getElementById('saveOR').onclick=()=>{ cfg.openrouterKey=(orKeyEl.value||'').trim(); cfg.openrouterModel=(orModelEl.value||'').trim(); localStorage.setItem('or_key',cfg.openrouterKey); localStorage.setItem('or_model',cfg.openrouterModel); document.getElementById('orStatus').textContent = cfg.openrouterKey? 'Using OpenRouter (free model)':'Using WebLLM fallback'; };
+document.getElementById('saveGroq').onclick=()=>{ cfg.groqKey=(groqEl.value||'').trim(); localStorage.setItem('groq_key',cfg.groqKey); document.getElementById('groqStatus').textContent = cfg.groqKey? 'STT via Groq Whisper':'STT via browser'; };
+
+/* ========================= Init ========================= */
+(function init(){
+  // Header stats
+  document.getElementById('streak').textContent='0'; document.getElementById('combo').textContent='x1';
+  xpEl.textContent='0'; levelEl.textContent=S.level;
+  // Language bar
+  renderLangBar();
+  // Seed a few cross-language starter cards
+  if(!S.deck.length){
+    addToDeck("A table for two, please","Una mesa para dos, por favor","restaurant");
+    addToDeck("To the airport, please","Zum Flughafen, bitte.","taxi");
+    addToDeck("Where is the metro station?","Où est la station de métro ?","directions");
+    addToDeck("The bill, please","La cuenta, por favor","restaurant");
+  }
+  nextDue();
+  logSys("Tip: Paste an OpenRouter API key for better conversation. All keys stay in your browser only.");
+})();
+</script>
+</body>
+</html>

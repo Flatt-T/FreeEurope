@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>EuroLingo — Multilingual Voice Tutor (OpenRouter + WebLLM Fallback)</title>
+<title>EuroLingo — Multilingual Voice Tutor (Fluid + AI Pronunciation)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -20,7 +20,9 @@
   .pad{padding:12px} .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:var(--text);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   .primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#01151a;font-weight:800}
-  .danger{background:var(--danger)} .muted{color:var(--muted)} input{background:#0b1220;border:1px solid #24324c;color:var(--text);border-radius:10px;padding:8px 10px}
+  .danger{background:var(--danger)} .muted{color:var(--muted)}
+  input{background:#0b1220;border:1px solid #24324c;color:var(--text);border-radius:10px;padding:8px 10px}
+  .big{padding:14px 18px;font-size:1.05em;border-radius:14px}
 
   /* Language bar */
   .langbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0b142a,#0d1733)}
@@ -50,9 +52,13 @@
   /* Flashcards */
   .deck .title{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
   .flash{padding:12px;display:grid;gap:8px}
-  .card{min-height:110px;border:1px dashed #2a3a5c;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.05em;background:#09142b}
-  .back{display:none} .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .cardsRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media(max-width:760px){.cardsRow{grid-template-columns:1fr}}
+  .card{min-height:110px;border:1px dashed #2a3a5c;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.05em;background:#09142b;padding:12px;text-align:center}
+  .back{display:none}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .chip{background:#152338;border:1px solid #1e2e4f;padding:6px 10px;border-radius:999px;color:#c8d7ef;font-size:.9em}
+  .score{font-weight:800}
 
   /* Settings */
   .settings{padding:10px;border-top:1px dashed #20314f;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -78,13 +84,14 @@
   <section class="panel chat">
     <div class="top">
       <div class="row">
-        <button id="startBtn" class="primary">▶️ Start</button>
-        <button id="stopBtn" class="danger">⏹️ Stop</button>
+        <button id="startBtn" class="primary big">▶️ Start</button>
+        <button id="stopBtn" class="danger big">⏹️ Stop</button>
+        <button id="interruptBtn" class="pill">⛔ Interrupt</button>
         <span id="status" class="pill">idle</span>
         <span class="pill" style="margin-left:auto">Level: <b id="level" class="lvl">A1</b></span>
       </div>
       <div class="muted" style="margin-top:6px">
-        Speaks your chosen language with a short English subtitle. Say anything—auto-detects the situation and keeps role-playing.
+        Speaks your chosen language with a short English subtitle. <b>Listens immediately</b> and supports <b>barge-in</b> (interrupt while it’s speaking).
       </div>
     </div>
     <div id="chat" class="mid" aria-live="polite"></div>
@@ -116,32 +123,40 @@
   <!-- Meters -->
   <section class="panel">
     <div class="meters">
-      <div class="meter"><h4>Pronunciation</h4><div class="bar"><div id="pronBar"></div></div><div class="coach" id="pronTip">Open vowels clearly.</div></div>
-      <div class="meter"><h4>Accent</h4><div class="bar"><div id="accentBar"></div></div><div class="coach" id="accentTip">Consistent word stress.</div></div>
-      <div class="meter"><h4>Fluency</h4><div class="bar"><div id="fluencyBar"></div></div><div class="coach" id="fluencyTip">Short, complete sentences.</div></div>
-      <div class="meter"><h4>Confidence</h4><div class="bar"><div id="confBar"></div></div><div class="coach" id="confTip">Calm pace, clear voice.</div></div>
+      <div class="meter"><h4>Pronunciation</h4><div class="bar"><div id="pronBar"></div></div><div class="coach" id="pronTip">—</div></div>
+      <div class="meter"><h4>Accent</h4><div class="bar"><div id="accentBar"></div></div><div class="coach" id="accentTip">—</div></div>
+      <div class="meter"><h4>Fluency</h4><div class="bar"><div id="fluencyBar"></div></div><div class="coach" id="fluencyTip">—</div></div>
+      <div class="meter"><h4>Confidence</h4><div class="bar"><div id="confBar"></div></div><div class="coach" id="confTip">—</div></div>
     </div>
   </section>
 
   <!-- Flashcards -->
   <section class="panel deck">
     <div class="title">
-      <span>🃏 Adaptive Flashcards (auto-adds from tutor quotes)</span>
+      <span>🃏 Adaptive Flashcards (AI-checked “say it”)</span>
       <span class="pill" style="margin-left:auto">Due: <b id="dueCount">0</b></span>
     </div>
     <div class="flash">
-      <div id="fcFront" class="card front"></div>
-      <div id="fcBack" class="card back"></div>
+      <div class="cardsRow">
+        <div id="fcFront" class="card front">Front (English)</div>
+        <div id="fcBack" class="card back">Back (Target language)</div>
+      </div>
       <div class="controls">
-        <button id="showCard" class="pill">Show</button>
+        <button id="prevCard" class="pill">⬅️ Prev</button>
+        <button id="nextCard" class="pill">Next ➡️</button>
+        <button id="showCard" class="pill">Flip</button>
+
         <button id="again" class="pill">Again</button>
         <button id="hard" class="pill">Hard</button>
         <button id="good" class="pill">Good</button>
         <button id="easy" class="primary">Easy</button>
+
         <span class="chip" id="deckInfo">Module: —</span>
-        <button id="speakCard" class="pill">🔊 Say it</button>
-        <button id="sayCard" class="pill">🎤 I’ll say it</button>
+
+        <button id="speakCard" class="primary big">🔊 Speak Card</button>
+        <button id="sayCard" class="primary big">🎤 I’ll say it</button>
         <span id="sayResult" class="muted"></span>
+        <span id="sayScore" class="chip score"></span>
       </div>
     </div>
   </section>
@@ -169,55 +184,65 @@ const LANGS = [
   {key:'bg', label:'Български',tts:'bg-BG', stt:'bg-BG', tag:'BG', tutor:'Треньор по пътувания'},
 ];
 
-/* ========================= State ========================= */
+/* ========================= State & Config ========================= */
+const EMBEDDED_OR_KEY = "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"; /* visible in source by request */
 const S = {
   level:'A1', scenario:'general',
-  stop:true, speaking:false,
+  stop:true, speaking:false, barge:false,
   xp:0, combo:1, corrStreak:0,
   history:[], memory:"",
-  deck: JSON.parse(localStorage.getItem('deck_multi_v1')||'[]'),
-  lang: localStorage.getItem('lang_key') || 'es'
+  deck: JSON.parse(localStorage.getItem('deck_multi_v2')||'[]'),
+  lang: localStorage.getItem('lang_key') || 'es',
+  currentIndex: 0, lastExpectedPhrase:"", lastEN:""
 };
 const cfg = {
-  openrouterKey: localStorage.getItem('or_key')||'',
+  openrouterKey: localStorage.getItem('or_key')||EMBEDDED_OR_KEY,
   openrouterModel: localStorage.getItem('or_model')||'meta-llama/llama-3.2-11b-vision-instruct:free',
   groqKey: localStorage.getItem('groq_key')||''
 };
 
-/* ========================= UI wiring ========================= */
+/* ========================= UI refs ========================= */
 const chatEl=document.getElementById('chat'), statusEl=document.getElementById('status');
 const xpEl=document.getElementById('xp'), xpFill=document.getElementById('xpfill');
 const levelEl=document.getElementById('level');
+const bar=document.getElementById('langbar');
+const sayRes=document.getElementById('sayResult'), sayScoreEl=document.getElementById('sayScore');
 
+/* ========================= Helpers ========================= */
 function esc(s){return s.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
-function logAssistant(native,en){
-  const d=document.createElement('div'); d.className='bubble';
-  d.innerHTML=`<strong>Tutor:</strong> ${esc(native)}<div class="subtitle">EN: ${esc(en)}</div>`;
-  chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight;
-}
+function currentLang(){ return LANGS.find(l=>l.key===S.lang) || LANGS[0]; }
+function logAssistant(native,en){ const d=document.createElement('div'); d.className='bubble'; d.innerHTML=`<strong>Tutor:</strong> ${esc(native)}<div class="subtitle">EN: ${esc(en)}</div>`; chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight; }
 function logUser(t){ const d=document.createElement('div'); d.className='bubble me'; d.innerHTML=`<strong>You:</strong> ${esc(t)}`; chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight; }
 function logSys(t){ const d=document.createElement('div'); d.className='bubble sys'; d.textContent=t; chatEl.appendChild(d); chatEl.scrollTop=chatEl.scrollHeight; }
 function setStatus(t){ statusEl.textContent=t; }
 function addXP(n){ S.xp+=n; xpEl.textContent=S.xp; xpFill.style.width=(S.xp%100)+'%'; }
+function renderLangBar(){ bar.innerHTML=''; LANGS.forEach(l=>{ const b=document.createElement('button'); b.className='langbtn'+(l.key===S.lang?' active':''); b.textContent=l.label; b.onclick=()=>{ S.lang=l.key; localStorage.setItem('lang_key',S.lang); resetConversation(true); renderLangBar(); }; bar.appendChild(b); }); }
 
-function currentLang(){ return LANGS.find(l=>l.key===S.lang) || LANGS[0]; }
-
-/* ========================= Language bar ========================= */
-const bar = document.getElementById('langbar');
-function renderLangBar(){
-  bar.innerHTML='';
-  LANGS.forEach(l=>{
-    const b=document.createElement('button'); b.className='langbtn'+(l.key===S.lang?' active':''); b.textContent=l.label;
-    b.onclick=()=>{ S.lang=l.key; localStorage.setItem('lang_key',S.lang); renderLangBar(); resetConversation(true); };
-    bar.appendChild(b);
+/* ========================= TTS with barge-in ========================= */
+async function speak(text, langCode){
+  if(!('speechSynthesis' in window)) return;
+  return new Promise(res=>{
+    const u=new SpeechSynthesisUtterance(text); u.lang=langCode; u.rate=1.0;
+    S.speaking=true; u.onend=()=>{S.speaking=false;res()}; u.onerror=()=>{S.speaking=false;res()};
+    try{ speechSynthesis.cancel(); }catch{}
+    speechSynthesis.speak(u);
   });
 }
+function cancelSpeak(){ try{speechSynthesis.cancel();}catch{} S.speaking=false; }
 
-/* ========================= TTS ========================= */
-async function speak(text, langCode){ if(!('speechSynthesis' in window)) return; return new Promise(res=>{ const u=new SpeechSynthesisUtterance(text); u.lang=langCode; u.rate=1.0; u.onend=()=>res(); try{speechSynthesis.cancel();}catch{} speechSynthesis.speak(u); }); }
-
-/* ========================= STT: Browser or Groq Whisper (optional) ========================= */
-async function listenBrowser(lang){ return new Promise(resolve=>{ const Rec=window.webkitSpeechRecognition; if(!Rec){ logSys('Speech recognition not supported.'); return resolve(''); } const r=new Rec(); r.lang=lang; r.interimResults=false; r.maxAlternatives=1; setStatus('🎙️ listening…'); let done=false; const killer=setTimeout(()=>{ if(!done){ try{r.abort();}catch{} } },16000); r.onresult=e=>{done=true; clearTimeout(killer); setStatus('processing…'); resolve(e.results[0]?.[0]?.transcript||'');}; r.onerror=()=>{if(!done){done=true;clearTimeout(killer);resolve('');}}; r.onend=()=>{if(!done){done=true;clearTimeout(killer);resolve('');}}; try{r.start();}catch{resolve('');} }); }
+/* ========================= STT (browser or Groq) with barge-in ========================= */
+async function listenBrowser(lang){
+  return new Promise(resolve=>{
+    const Rec=window.webkitSpeechRecognition; if(!Rec){ logSys('Speech recognition not supported.'); return resolve(''); }
+    const r=new Rec(); r.lang=lang; r.interimResults=false; r.maxAlternatives=1;
+    setStatus('🎙️ listening…'); let done=false;
+    const killer=setTimeout(()=>{ if(!done){ try{r.abort();}catch{} } },16000);
+    r.onresult=e=>{done=true; clearTimeout(killer); setStatus('processing…'); resolve(e.results[0]?.[0]?.transcript||'');};
+    r.onerror=()=>{if(!done){done=true;clearTimeout(killer);resolve('');}};
+    r.onend=()=>{if(!done){done=true;clearTimeout(killer);resolve('');}};
+    try{ r.start(); }catch{ resolve(''); }
+  });
+}
 async function recordBlob(ms=8000){
   if(!navigator.mediaDevices?.getUserMedia) return null;
   const stream = await navigator.mediaDevices.getUserMedia({audio:true}); const rec=new MediaRecorder(stream,{mimeType:'audio/webm'});
@@ -234,134 +259,162 @@ async function listenGroq(lang){
     if(!r.ok) throw new Error('groq stt error'); const j = await r.json(); return j.text || '';
   }catch{ return ''; }
 }
-async function listen(lang){ if(cfg.groqKey) return await listenGroq(lang); return await listenBrowser(lang); }
+async function listen(lang){ return cfg.groqKey ? await listenGroq(lang) : await listenBrowser(lang); }
 
-/* ========================= Conversation engines: OpenRouter → WebLLM fallback ========================= */
-const orKeyEl=document.getElementById('orKey'), orModelEl=document.getElementById('orModel');
-const groqEl=document.getElementById('groqKey');
-orKeyEl.value = cfg.openrouterKey; orModelEl.value = cfg.openrouterModel; groqEl.value = cfg.groqKey;
-
-async function chatOpenRouter(history){
-  const body = { model: cfg.openrouterModel, messages: history, temperature: 0.6, max_tokens: 220 };
+/* ========================= OpenRouter + WebLLM ========================= */
+async function orChat(messages, max=220){
+  const body = { model: cfg.openrouterModel, messages, temperature:0.6, max_tokens:max };
   const r = await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openrouterKey,'HTTP-Referer': location.origin,'X-Title':'EuroLingo Tutor'},
     body: JSON.stringify(body)
   });
   if(!r.ok) throw new Error('openrouter error');
-  const j = await r.json(); return (j.choices?.[0]?.message?.content||'').trim();
+  const j = await r.json();
+  return (j.choices?.[0]?.message?.content||'').trim();
 }
-
 let webllmEngine=null, webllmReady=false;
 async function initWebLLM(){
   if(webllmReady) return;
   if(!('mlc' in window)) throw new Error('WebLLM missing');
-  const initProgressCallback=(r)=> setStatus('loading: '+(r.text||''));
-  try{
-    webllmEngine = await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback});
-  }catch{
-    webllmEngine = await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback});
-  }
+  const initProgressCallback=(r)=> setStatus('loading: '+(r.text||'')); 
+  try{ webllmEngine = await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback}); }
+  catch{ webllmEngine = await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback}); }
   webllmReady=true; setStatus('model ready (local)');
 }
-async function chatWebLLM(history){
+async function wllmChat(messages,max=200){
   await initWebLLM();
-  const out = await webllmEngine.chat.completions.create({messages: history, temperature:0.6, max_tokens:200, stream:false});
+  const out = await webllmEngine.chat.completions.create({messages, temperature:0.6, max_tokens:max, stream:false});
   return out.choices?.[0]?.message?.content || '';
 }
 
-/* ========================= System prompt builder ========================= */
+/* ========================= Prompts (with few-shots to avoid “I understand”) ========================= */
 function sysPrompt(){
   const L = currentLang();
-  const TAG = L.tag; // e.g., ES / DE / FR …
-  const coach = L.tutor;
   return `
-You are "${coach}", a ${L.label} travel tutor. ALWAYS reply as two lines:
-${TAG}: <natural ${L.label}, ≤60 words, include 1 follow-up question, correct gently if needed; if asked “how do I say…/what does…?/(${L.key==='pl'?'Co znaczy…?':L.key==='lt'?'Ką reiškia…?':'¿Qué significa…?/Was bedeutet…?/Que veut dire…?/Co znaczy…?/Ką reiškia…?'})”, GIVE the ${L.label} phrase first, then continue.>
-EN: <very short English subtitle (5–15 words) matching the ${TAG} line>
-Stay in character (restaurant/taxi/directions/hotel/money/emergencies/social) inferred from the user. Keep it friendly and fluid.
+You are "${L.tutor}", a ${L.label} travel tutor for beginners-to-intermediate.
+STRICT OUTPUT: two lines only:
+${L.tag}: <natural ${L.label}, ≤60 words, include a follow-up question, gently correct mistakes inline; if asked "how do I say/what does/(${L.key==='de'?'Was bedeutet':L.key==='fr'?'Que veut dire':L.key==='pl'?'Co znaczy':L.key==='lt'?'Ką reiškia':'¿Qué significa'})", GIVE the ${L.label} phrase first (in quotes) then continue the scene.>
+EN: <5–15 word English subtitle of the ${L.tag} line>
+
+Stay in character (restaurant/taxi/directions/hotel/money/emergencies/social). Keep the chat fluid — never repeat the same sentence.
+Examples:
+User: how do I ask for the bill?
+${L.tag}: "La cuenta, por favor." ¿Quieres pagar con tarjeta o en efectivo?
+EN: Say “The bill, please.” Card or cash?
+User: i need a taxi
+${L.tag}: Claro. Puedes decir: "Un taxi, por favor." ¿Adónde vas?
+EN: Say “A taxi, please.” Where are you headed?
 `.trim();
 }
-
 function parseTwoLines(text){
   const TAG = currentLang().tag;
-  const m1 = new RegExp("^\\s*" + TAG + ":\\s*(.+)$","im").exec(text);
-  const m2 = /^\s*EN:\s*(.+)$/im.exec(text);
+  const m1 = new RegExp("^\\s*"+TAG+":\\s*(.+)$","im").exec(text||"");
+  const m2 = /^\s*EN:\s*(.+)$/im.exec(text||"");
   if(m1&&m2) return {nat:m1[1].trim(), en:m2[1].trim()};
-  const lines = (text||'').split('\n').map(s=>s.trim()).filter(Boolean);
-  return {nat: lines[0]||'Entendido.', en: lines[1]||'Understood.'};
+  const lines=(text||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  return {nat: lines[0]||'OK.', en: lines[1]||'Understood.'};
 }
 
-/* ========================= Helpers ========================= */
+/* ========================= Scenario detection ========================= */
 function detectScenario(t){
   const s=t.toLowerCase();
-  if(/resta|menu|camar|rechnung|tisch|menu|garçon|bill|mesa|menú|speisekarte|kellner/.test(s)) return 'restaurant';
+  if(/resta|menu|camar|rechnung|tisch|garçon|bill|mesa|menú|speisekarte|kellner|carte/.test(s)) return 'restaurant';
   if(/taxi|airport|aeropuerto|flughafen|aéroport|gare|station|metro|bus|train|ubahn|u-bahn/.test(s)) return 'taxi';
   if(/direc|left|right|straight|izquierda|derecha|gauche|droite|links|rechts|geradeaus|wo ist/.test(s)) return 'directions';
-  if(/hotel|room|check|llave|schlüssel|clé|frühstück|desayuno/.test(s)) return 'hotel';
+  if(/hotel|room|check|llave|schlüssel|clé|frühstück|desayuno|reception/.test(s)) return 'hotel';
   if(/money|euros?|price|precio|wie viel|combien|tarjeta|efectivo|cash/.test(s)) return 'money';
   if(/help|ayuda|hilfe|police|polizei|ambulance|apotheke|farmacia|emergen/.test(s)) return 'emergencies';
-  if(/friend|foto|recommend|recomienda|empfehl|social|smalltalk|charla/.test(s)) return 'social';
+  if(/friend|foto|recommend|recomienda|empfehl|social|smalltalk|charla|conversa/.test(s)) return 'social';
   return S.scenario||'restaurant';
 }
+
+/* ========================= AI Pronunciation/Fluency scoring ========================= */
 const bars={pron:document.getElementById('pronBar'),accent:document.getElementById('accentBar'),flu:document.getElementById('fluencyBar'),conf:document.getElementById('confBar')};
 const tips={pron:document.getElementById('pronTip'),accent:document.getElementById('accentTip'),flu:document.getElementById('fluencyTip'),conf:document.getElementById('confTip')};
 function norm(n){return Math.max(0,Math.min(100,Math.round(n))); }
-function jaccard(a,b){ a=a.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); b=b.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); const A=new Set(a.split('')); const B=new Set(b.split('')); const inter=[...A].filter(x=>B.has(x)).length; const uni=new Set([...A,...B]).size; return uni?inter/uni:0; }
-function scriptness(t){ return /[ñáéíóúüäöüßàâçéèêëîïôûùėįąęłńćźżșțăίάέήώϊϋά-ώа-яА-Я]/i.test(t)?1:(/[a-z]/i.test(t)?0.6:0.4); }
-function updateMeters(userText){ const base = S.lastExpectedPhrase? jaccard(userText,S.lastExpectedPhrase): scriptness(userText);
-  const pron=norm(40+60*base), words=userText.trim().split(/\s+/).filter(Boolean).length;
-  const flu=norm(35+Math.min(65,words*4)), accent=norm(35+65*scriptness(userText)), conf=norm(30+70*Math.min(1,userText.length/40));
-  bars.pron.style.width=pron+'%'; tips.pron.textContent= pron<55?"Articulate clearly.":"Nice clarity!";
-  bars.flu.style.width=flu+'%'; tips.flu.textContent= flu<55?"Shorter sentences help.":"Good flow!";
-  bars.accent.style.width=accent+'%'; tips.accent.textContent= accent<55?"Consistent stress helps.":"Rhythm improving.";
-  bars.conf.style.width=conf+'%'; tips.conf.textContent= conf<55?"Steady pace, project.":"Confident tone.";
+function heuristicScore(userText, target){ // fallback
+  const a=(userText||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const b=(target||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const A=new Set(a.split('')); const B=new Set(b.split(''));
+  const inter=[...A].filter(x=>B.has(x)).length; const uni=new Set([...A,...B]).size||1;
+  const sim=inter/uni;
+  return {pron:norm(30+60*sim),accent:norm(30+60*sim),fluency:norm(30+Math.min(70,(userText.split(/\s+/).length||0)*6)),confidence:norm(25+Math.min(75,(userText.length||0)/40*75)),feedback:"Heuristic check only."};
+}
+async function aiScore(userText, targetLangCode, expected){
+  try{
+    const TAG=currentLang().tag;
+    const sys=`You are a pronunciation coach for ${currentLang().label}. Return STRICT JSON only with keys: pron, accent, fluency, confidence (0-100 integers) and feedback (<=15 words). Be strict if the text is English or wrong language.`;
+    const user=`LanguageTag=${TAG}\nTarget="${expected||''}"\nUserSaid="${userText||''}"\nRate their ${TAG} pronunciation and speaking.`;
+    const raw = await orChat([{role:'system',content:sys},{role:'user',content:user}], 150);
+    const json = JSON.parse((raw.match(/\{[\s\S]*\}$/)||[raw])[0]);
+    return {
+      pron:norm(json.pron), accent:norm(json.accent), fluency:norm(json.fluency), confidence:norm(json.confidence),
+      feedback: String(json.feedback||'Good effort.').slice(0,60)
+    };
+  }catch(e){ return heuristicScore(userText, expected); }
+}
+function updateMetersFrom(obj){
+  bars.pron.style.width=obj.pron+'%'; tips.pron.textContent = obj.feedback||'';
+  bars.accent.style.width=obj.accent+'%'; tips.accent.textContent = obj.accent<55?'Mind stress & vowels.':'Accent improving.';
+  bars.fluency.style.width=obj.fluency+'%'; tips.fluency.textContent = obj.fluency<55?'Short complete clauses.':'Good flow.';
+  bars.conf.style.width=obj.confidence+'%'; tips.conf.textContent = obj.confidence<55?'Steady pace, project.':'Confident tone.';
 }
 
 /* ========================= Flashcards (SRS) ========================= */
-const FC={front:document.getElementById('fcFront'),back:document.getElementById('fcBack'),dueCount:document.getElementById('dueCount'),deckInfo:document.getElementById('deckInfo'),sayRes:document.getElementById('sayResult')};
-function days(n){return n*24*60*60*1000} function saveDeck(){ localStorage.setItem('deck_multi_v1', JSON.stringify(S.deck)); }
-function newCard(front,back,module){return {id:(module||'focus')+'::'+back,front,back,ease:2.5,interval:0,due:Date.now(),reps:0,lapses:0,module:module||'focus'}}
+const FC={front:document.getElementById('fcFront'),back:document.getElementById('fcBack'),dueCount:document.getElementById('dueCount'),deckInfo:document.getElementById('deckInfo')};
+const sayResEl=document.getElementById('sayResult');
+function days(n){return n*24*60*60*1000}
+function saveDeck(){ localStorage.setItem('deck_multi_v2', JSON.stringify(S.deck)); }
+function newCard(frontEN,backNative,module){return {id:(module||'focus')+'::'+backNative,frontEN,backNative,ease:2.5,interval:0,due:Date.now(),reps:0,lapses:0,module:module||'focus'}}
 function reviewCard(c,g){const n={...c}; if(g===0){n.lapses++;n.interval=0;n.ease=Math.max(1.3,n.ease-0.2);n.due=Date.now()+days(0.04);} else {if(n.interval===0)n.interval=(g===3?3:1); else if(n.interval===1)n.interval=(g===3?6:3); else n.interval=Math.round(n.interval*(n.ease)*(g===1?0.7:1)); n.ease=Math.max(1.3,n.ease+(g===3?0.15:(g===1?-0.05:0.05))); n.due=Date.now()+days(n.interval);} n.reps++; return n;}
-function addToDeck(front,back,module){ if(!front||!back) return; if(S.deck.find(d=>d.id===(module||'focus')+'::'+back)) return; S.deck.push(newCard(front,back,module)); saveDeck(); }
-function nextDue(){ const due=S.deck.filter(c=>c.due<=Date.now()); const pool=due.length?due:S.deck;
-  if(!pool.length){ FC.front.textContent="No cards yet. I’ll add tricky phrases here automatically."; FC.back.style.display='none'; FC.front.style.display='flex'; FC.dueCount.textContent='0'; FC.deckInfo.textContent='Module: —'; return; }
-  const c=pool.sort((a,b)=> (b.lapses-a.lapses) || (a.interval-b.interval))[0]; S.currentCard=c;
-  FC.front.textContent=c.front; FC.back.textContent=c.back; FC.front.style.display='flex'; FC.back.style.display='none'; FC.dueCount.textContent=String(due.length); FC.deckInfo.textContent='Module: '+(c.module||'focus'); S.lastExpectedPhrase=c.back;
+function addToDeck(frontEN,backNative,module){ if(!frontEN||!backNative) return; if(S.deck.find(d=>d.id===(module||'focus')+'::'+backNative)) return; S.deck.push(newCard(frontEN,backNative,module)); saveDeck(); }
+function showCard(idx){
+  if(!S.deck.length){ FC.front.textContent="No cards yet."; FC.back.textContent="Practice will appear here."; FC.back.style.display='none'; FC.front.style.display='flex'; FC.dueCount.textContent='0'; FC.deckInfo.textContent='Module: —'; return; }
+  S.currentIndex = ((idx%S.deck.length)+S.deck.length)%S.deck.length;
+  const c=S.deck[S.currentIndex]; FC.front.textContent=c.frontEN; FC.back.textContent=c.backNative;
+  FC.front.style.display='flex'; FC.back.style.display='flex';
+  const due=S.deck.filter(k=>k.due<=Date.now()); FC.dueCount.textContent=String(due.length||S.deck.length);
+  FC.deckInfo.textContent='Module: '+(c.module||'focus'); S.lastExpectedPhrase=c.backNative; S.lastEN=c.frontEN;
 }
-document.getElementById('showCard').onclick=()=>{ if(!S.currentCard) return; FC.front.style.display='none'; FC.back.style.display='flex'; };
-function gradeCard(g){ if(!S.currentCard) return; const i=S.deck.findIndex(x=>x.id===S.currentCard.id); S.deck[i]=reviewCard(S.currentCard,g); saveDeck(); nextDue(); addXP(g>=2?8:2); }
-document.getElementById('again').onclick=()=>gradeCard(0); document.getElementById('hard').onclick=()=>gradeCard(1); document.getElementById('good').onclick=()=>gradeCard(2); document.getElementById('easy').onclick=()=>gradeCard(3);
-document.getElementById('speakCard').onclick=()=>{ if(S.currentCard) speak(S.currentCard.back, currentLang().tts); };
-document.getElementById('sayCard').onclick=async()=>{ if(!S.currentCard) return; const heard=await listen(currentLang().tts); FC.sayRes.textContent=heard?('You said: '+heard):''; if(heard){ const sim=jaccard(heard,S.currentCard.back); gradeCard(sim>0.7?3:0); updateMeters(heard);} };
+function gradeCard(g){ if(!S.deck.length) return; const i=S.currentIndex; S.deck[i]=reviewCard(S.deck[i],g); saveDeck(); showCard(i+1); addXP(g>=2?8:2); }
 
-/* ========================= Conversation Loop ========================= */
+/* ========================= Conversation ========================= */
 function baseSystem(){ return sysPrompt() + `\nCurrent scenario: ${S.scenario}. Keep it friendly and fluid.`; }
 function buildMessages(userText){ const msgs=[{role:'system',content:baseSystem()},...S.history.slice(-10)]; if(userText!=null) msgs.push({role:'user',content:userText}); return msgs; }
-
 async function converse(userText){
-  let raw=''; try{ raw = cfg.openrouterKey ? await chatOpenRouter(buildMessages(userText)) : await chatWebLLM(buildMessages(userText)); }catch{ raw=''; }
-  const {nat,en} = parseTwoLines(raw||'');
+  let raw=''; try{ raw = await orChat(buildMessages(userText)); }catch{ try{ raw = await wllmChat(buildMessages(userText)); }catch{ raw=''; } }
+  let {nat,en}=parseTwoLines(raw);
+  // If the model went bland, synthesize a direct, scenario-specific reply:
+  if(!nat || /^ok\.?|understood\.?$/i.test(en)) {
+    const L=currentLang(); if(/taxi|cab/i.test(userText)) { nat=`"Un taxi, por favor." ¿Adónde vas?`; en=`Say “A taxi, please.” Where to?`; }
+    else if(/bill|check|cuenta|rechnung|addition/i.test(userText)) { nat=`"La cuenta, por favor." ¿Pagas con tarjeta o efectivo?`; en=`Say “The bill, please.” Card or cash?`; }
+  }
   return {nat,en};
 }
-
-function harvestPhrase(nativeText){
-  // try to capture quoted phrase in any quotation style
-  const m = nativeText.match(/[“”"„«»‚‘’‹›「」『』]([^“”"„«»‚‘’‹›「」『』]+)[“”"„«»‚‘’‹›」』]/);
-  const phrase=(m?.[1]||'').trim();
-  if(phrase) addToDeck("Say:", phrase, S.scenario);
+function harvestPhrase(nativeText, enSubtitle){
+  const m = nativeText.match(/[“”"„«»‚‘’‹›]([^“”"„«»‚‘’‹›]+)[“”"„«»‚‘’‹›]/);
+  const phrase=(m?.[1]||'').trim(); if(phrase) addToDeck(enSubtitle||'—', phrase, S.scenario);
 }
 
+/* ========================= Turn engine with barge-in ========================= */
+let recognizing=false, recPromise=null;
+async function bargeListen(lang){
+  recognizing=true;
+  const p = listen(lang).then(t=>{recognizing=false; return t;});
+  recPromise=p; return p;
+}
 async function start(){
   if(!S.stop) return; S.stop=false; levelEl.textContent=S.level;
   const L=currentLang();
-  const greet = {
-    es:"Hola, soy tu profe de viaje. ¿Qué situación practicamos: restaurante, taxi, direcciones, hotel, dinero, emergencias o social?",
-    de:"Hallo, ich bin dein Reisecoach. Welche Situation üben wir: Restaurant, Taxi, Wegbeschreibung, Hotel, Geld, Notfälle oder Smalltalk?",
-    fr:"Salut, je suis ton coach de voyage. On pratique quoi: restaurant, taxi, directions, hôtel, argent, urgences ou social?",
-    it:"Ciao, sono il tuo coach di viaggio. Che situazione proviamo: ristorante, taxi, indicazioni, hotel, soldi, emergenze o sociale?",
-    pt:"Olá, sou o seu treinador de viagem. Qual situação praticamos: restaurante, táxi, direções, hotel, dinheiro, emergências ou social?",
-    pl:"Cześć, jestem twoim trenerem podróży. Co ćwiczymy: restauracja, taksówka, wskazówki, hotel, pieniądze, nagłe wypadki czy rozmowa?",
+  // Greeting
+  const greetMap={
+    es:"Hola, soy tu profe de viaje. ¿Qué practicamos: restaurante, taxi, direcciones, hotel, dinero, emergencias o social?",
+    de:"Hallo, ich bin dein Reisecoach. Was üben wir: Restaurant, Taxi, Wegbeschreibung, Hotel, Geld, Notfälle oder Smalltalk?",
+    fr:"Salut, je suis ton coach de voyage. On pratique quoi : restaurant, taxi, directions, hôtel, argent, urgences ou social ?",
+    it:"Ciao, sono il tuo coach di viaggio. Che cosa alleniamo: ristorante, taxi, indicazioni, hotel, soldi, emergenze o sociale?",
+    pt:"Olá, sou o seu treinador de viagem. O que praticamos: restaurante, táxi, direções, hotel, dinheiro, emergências ou social?",
+    pl:"Cześć, jestem Twoim trenerem podróży. Co ćwiczymy: restauracja, taksówka, wskazówki, hotel, pieniądze, nagłe wypadki czy rozmowa?",
     lt:"Sveikas, aš tavo kelionių treneris. Ką treniruojame: restoraną, taksi, kryptis, viešbutį, pinigus, skubius atvejus ar pokalbį?",
     nl:"Hoi, ik ben je reiscoach. Wat oefenen we: restaurant, taxi, route, hotel, geld, noodgevallen of sociaal?",
     sv:"Hej, jag är din resecoach. Vad övar vi: restaurang, taxi, vägbeskrivning, hotell, pengar, nödfall eller socialt?",
@@ -373,43 +426,75 @@ async function start(){
     hu:"Szia, az utazási edződ vagyok. Mit gyakoroljunk: étterem, taxi, útbaigazítás, hotel, pénz, vészhelyzet vagy társalgás?",
     ro:"Salut, sunt antrenorul tău de călătorie. Ce exersăm: restaurant, taxi, indicații, hotel, bani, urgențe sau social?",
     bg:"Здрасти, аз съм твоят треньор по пътувания. Какво упражняваме: ресторант, такси, указания, хотел, пари, спешни случаи или разговор?"
-  }[L.key] || "Hola, empecemos. ¿Qué situación quieres practicar?";
-  logAssistant(greet,"Hi! Which situation do you want to practice?"); await speak(greet, L.tts);
+  };
+  const greet=greetMap[L.key]||"Hola, empecemos. ¿Qué situación quieres practicar?";
+  logAssistant(greet,"Hi! Which situation shall we practice?");
+  // Start speaking AND listening at once; if user speaks, we barge-in (cancel TTS)
+  const speakP = speak(greet, L.tts);
+  const hearP  = bargeListen(S.level==='A1'?'en-GB':L.stt);
+  const firstHeard = await Promise.race([speakP.then(()=>''), hearP]);
+  if(firstHeard){ cancelSpeak(); logUser(firstHeard); S.scenario=detectScenario(firstHeard); await handleTurn(firstHeard); }
 
   while(!S.stop){
-    const heard = await listen(S.level==='A1'?'en-GB':L.stt); if(S.stop) break; if(!heard) continue;
-    logUser(heard); S.scenario = detectScenario(heard); updateMeters(heard);
-    const {nat,en} = await converse(heard);
-    logAssistant(nat,en); await speak(nat, L.tts);
-    S.history.push({role:'user',content:heard}); S.history.push({role:'assistant',content:`${L.tag}: ${nat}\nEN: ${en}`});
-    harvestPhrase(nat); addXP(6);
+    const heard = await bargeListen(S.level==='A1'?'en-GB':L.stt); if(S.stop) break; if(!heard) continue;
+    logUser(heard); S.scenario=detectScenario(heard);
+    await handleTurn(heard);
   }
 }
-function stopAll(){ S.stop=true; try{speechSynthesis.cancel();}catch{} setStatus('stopped'); }
-function resetConversation(notify=false){ S.stop=true; S.history=[]; S.scenario='general'; if(notify){ logSys(`Language set to ${currentLang().label}. Press Start.`);} }
+async function handleTurn(heard){
+  // respond
+  const {nat,en}=await converse(heard);
+  logAssistant(nat,en); S.lastExpectedPhrase = nat; S.lastEN = en;
+  await speak(nat,currentLang().tts); // will be interrupted if user barges in
+  // save history
+  S.history.push({role:'user',content:heard}); S.history.push({role:'assistant',content:`${currentLang().tag}: ${nat}\nEN: ${en}`});
+  harvestPhrase(nat,en); addXP(6);
+  // AI pronunciation/fluency scoring (compare to expected phrase if quoted, else to nat text)
+  const expected = (nat.match(/[“”"„«»‚‘’‹›]([^“”"„«»‚‘’‹›]+)[“”"„«»‚‘’‹›]/)?.[1]||nat);
+  const score = await aiScore(heard,currentLang().stt,expected);
+  updateMetersFrom(score);
+}
 
-/* ========================= Wire-up ========================= */
-document.getElementById('startBtn').onclick=()=>{ setStatus('starting…'); start(); };
-document.getElementById('stopBtn').onclick=()=> stopAll();
-document.getElementById('saveOR').onclick=()=>{ cfg.openrouterKey=(orKeyEl.value||'').trim(); cfg.openrouterModel=(orModelEl.value||'').trim(); localStorage.setItem('or_key',cfg.openrouterKey); localStorage.setItem('or_model',cfg.openrouterModel); document.getElementById('orStatus').textContent = cfg.openrouterKey? 'Using OpenRouter (free model)':'Using WebLLM fallback'; };
-document.getElementById('saveGroq').onclick=()=>{ cfg.groqKey=(groqEl.value||'').trim(); localStorage.setItem('groq_key',cfg.groqKey); document.getElementById('groqStatus').textContent = cfg.groqKey? 'STT via Groq Whisper':'STT via browser'; };
+/* ========================= Controls & Settings ========================= */
+document.getElementById('startBtn').onclick=()=>{ S.stop=false; setStatus('starting…'); start(); };
+document.getElementById('stopBtn').onclick=()=>{ S.stop=true; cancelSpeak(); setStatus('stopped'); };
+document.getElementById('interruptBtn').onclick=()=>{ cancelSpeak(); setStatus('interrupted → listening'); };
+document.getElementById('saveOR').onclick=()=>{ const k=(document.getElementById('orKey').value||'').trim(); const m=(document.getElementById('orModel').value||'').trim(); if(k) cfg.openrouterKey=k; cfg.openrouterModel=m||cfg.openrouterModel; localStorage.setItem('or_key',cfg.openrouterKey); localStorage.setItem('or_model',cfg.openrouterModel); document.getElementById('orStatus').textContent = 'OpenRouter ready.'; };
+document.getElementById('saveGroq').onclick=()=>{ cfg.groqKey=(document.getElementById('groqKey').value||'').trim(); localStorage.setItem('groq_key',cfg.groqKey); document.getElementById('groqStatus').textContent = cfg.groqKey? 'STT via Groq Whisper':'STT via browser'; };
+
+/* ========================= Flashcard handlers ========================= */
+document.getElementById('showCard').onclick=()=>{ const front=document.getElementById('fcFront'); const back=document.getElementById('fcBack'); const isBack=back.style.display!=='none'; back.style.display=isBack?'none':'flex'; };
+document.getElementById('prevCard').onclick=()=>{ if(S.deck.length) showCard(S.currentIndex-1); };
+document.getElementById('nextCard').onclick=()=>{ if(S.deck.length) showCard(S.currentIndex+1); };
+document.getElementById('again').onclick=()=>gradeCard(0);
+document.getElementById('hard').onclick=()=>gradeCard(1);
+document.getElementById('good').onclick=()=>gradeCard(2);
+document.getElementById('easy').onclick=()=>gradeCard(3);
+document.getElementById('speakCard').onclick=()=>{ const c=S.deck[S.currentIndex]; if(c) speak(c.backNative,currentLang().tts); };
+document.getElementById('sayCard').onclick=async()=>{
+  const c=S.deck[S.currentIndex]; if(!c) return;
+  const heard = await listen(currentLang().stt); sayRes.textContent = heard?('You said: '+heard):'';
+  if(!heard) return;
+  const result = await aiScore(heard,currentLang().stt,c.backNative);
+  updateMetersFrom(result);
+  const label = result.pron>=85?'Excellent':result.pron>=70?'Good':result.pron>=50?'Fair':'Poor';
+  sayScoreEl.textContent = `Score: ${label} (${result.pron})`;
+};
 
 /* ========================= Init ========================= */
 (function init(){
-  // Header stats
+  renderLangBar();
   document.getElementById('streak').textContent='0'; document.getElementById('combo').textContent='x1';
   xpEl.textContent='0'; levelEl.textContent=S.level;
-  // Language bar
-  renderLangBar();
-  // Seed a few cross-language starter cards
+  // Seed cross-language starter cards if needed
   if(!S.deck.length){
     addToDeck("A table for two, please","Una mesa para dos, por favor","restaurant");
     addToDeck("To the airport, please","Zum Flughafen, bitte.","taxi");
     addToDeck("Where is the metro station?","Où est la station de métro ?","directions");
     addToDeck("The bill, please","La cuenta, por favor","restaurant");
   }
-  nextDue();
-  logSys("Tip: Paste an OpenRouter API key for better conversation. All keys stay in your browser only.");
+  showCard(0);
+  logSys("Ready. Press Start. It will speak and listen immediately; you can interrupt it at any time.");
 })();
 </script>
 </body>

@@ -18,7 +18,7 @@
   main{max-width:1200px;margin:12px auto;padding:0 16px;display:grid;grid-template-columns:1fr;gap:12px}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
   .pad{padding:12px} .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:var(--text);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  button{border:0;border-radius:12px;padding:10px 14px;background:#1f2937;color:#fff;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   .primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#01151a;font-weight:800}
   .danger{background:var(--danger)} .muted{color:var(--muted)}
   input,select{background:#0b1220;border:1px solid #24324c;color:var(--text);border-radius:10px;padding:8px 10px}
@@ -97,7 +97,7 @@
       <div class="section">
         <b>OpenRouter</b>
         <input id="orKey" type="password" placeholder="OpenRouter API key (recommended)"/>
-        <input id="orModel" value="meta-llama/llama-3.2-11b-vision-instruct:free" size="42"/>
+        <input id="orModel" value="" size="42" placeholder="model id (auto-fallback enabled)"/>
         <label class="pill" style="gap:6px"><input type="checkbox" id="forceRemote"/> Force OpenRouter</label>
         <button id="saveOR" class="pill">Save</button>
         <button id="testOR" class="pill">Test</button>
@@ -154,17 +154,51 @@
 
 <script>
 /* ===== Languages ===== */
-const LANGS=[{key:'es',label:'Español',tts:'es-ES',stt:'es-ES',tag:'ES',tutor:'Profe de Viaje'},{key:'de',label:'Deutsch',tts:'de-DE',stt:'de-DE',tag:'DE',tutor:'Reisecoach'},{key:'fr',label:'Français',tts:'fr-FR',stt:'fr-FR',tag:'FR',tutor:'Coach de voyage'},{key:'it',label:'Italiano',tts:'it-IT',stt:'it-IT',tag:'IT',tutor:'Coach di viaggio'},{key:'pt',label:'Português',tts:'pt-PT',stt:'pt-PT',tag:'PT',tutor:'Treinador de viagem'},{key:'pl',label:'Polski',tts:'pl-PL',stt:'pl-PL',tag:'PL',tutor:'Trener podróży'},{key:'lt',label:'Lietuvių',tts:'lt-LT',stt:'lt-LT',tag:'LT',tutor:'Kelionių treneris'},{key:'nl',label:'Nederlands',tts:'nl-NL',stt:'nl-NL',tag:'NL',tutor:'Reiscoach'},{key:'sv',label:'Svenska',tts:'sv-SE',stt:'sv-SE',tag:'SV',tutor:'Resecoach'},{key:'da',label:'Dansk',tts:'da-DK',stt:'da-DK',tag:'DA',tutor:'Rejsecoach'},{key:'nb',label:'Norsk',tts:'nb-NO',stt:'nb-NO',tag:'NO',tutor:'Reisecoach'},{key:'fi',label:'Suomi',tts:'fi-FI',stt:'fi-FI',tag:'FI',tutor:'Matkavalmentaja'},{key:'el',label:'Ελληνικά',tts:'el-GR',stt:'el-GR',tag:'EL',tutor:'Προπονητής ταξιδιού'},{key:'cs',label:'Čeština',tts:'cs-CZ',stt:'cs-CZ',tag:'CS',tutor:'Trenér cestování'},{key:'hu',label:'Magyar',tts:'hu-HU',stt:'hu-HU',tag:'HU',tutor:'Utazási edző'},{key:'ro',label:'Română',tts:'ro-RO',stt:'ro-RO',tag:'RO',tutor:'Antrenor de călătorie'},{key:'bg',label:'Български',tts:'bg-BG',stt:'bg-BG',tag:'BG',tutor:'Треньор по пътувания'}];
+const LANGS = [
+  {key:'es', label:'Español',  tts:'es-ES', stt:'es-ES', tag:'ES', tutor:'Profe de Viaje'},
+  {key:'de', label:'Deutsch',  tts:'de-DE', stt:'de-DE', tag:'DE', tutor:'Reisecoach'},
+  {key:'fr', label:'Français', tts:'fr-FR', stt:'fr-FR', tag:'FR', tutor:'Coach de voyage'},
+  {key:'it', label:'Italiano', tts:'it-IT', stt:'it-IT', tag:'IT', tutor:'Coach di viaggio'},
+  {key:'pt', label:'Português',tts:'pt-PT', stt:'pt-PT', tag:'PT', tutor:'Treinador de viagem'},
+  {key:'pl', label:'Polski',   tts:'pl-PL', stt:'pl-PL', tag:'PL', tutor:'Trener podróży'},
+  {key:'lt', label:'Lietuvių', tts:'lt-LT', stt:'lt-LT', tag:'LT', tutor:'Kelionių treneris'},
+  {key:'nl', label:'Nederlands',tts:'nl-NL',stt:'nl-NL', tag:'NL', tutor:'Reiscoach'},
+  {key:'sv', label:'Svenska',  tts:'sv-SE', stt:'sv-SE', tag:'SV', tutor:'Resecoach'},
+  {key:'da', label:'Dansk',    tts:'da-DK', stt:'da-DK', tag:'DA', tutor:'Rejsecoach'},
+  {key:'nb', label:'Norsk',    tts:'nb-NO', stt:'nb-NO', tag:'NO', tutor:'Reisecoach'},
+  {key:'fi', label:'Suomi',    tts:'fi-FI', stt:'fi-FI', tag:'FI', tutor:'Matkavalmentaja'},
+  {key:'el', label:'Ελληνικά', tts:'el-GR', stt:'el-GR', tag:'EL', tutor:'Προπονητής ταξιδιού'},
+  {key:'cs', label:'Čeština',  tts:'cs-CZ', stt:'cs-CZ', tag:'CS', tutor:'Trenér cestování'},
+  {key:'hu', label:'Magyar',   tts:'hu-HU', stt:'hu-HU', tag:'HU', tutor:'Utazási edző'},
+  {key:'ro', label:'Română',   tts:'ro-RO', stt:'ro-RO', tag:'RO', tutor:'Antrenor de călătorie'},
+  {key:'bg', label:'Български',tts:'bg-BG', stt:'bg-BG', tag:'BG', tutor:'Треньор по пътувания'}
+];
 
-/* ===== State & Config ===== */
+/* ===== Config & Fallbacks ===== */
+const EMBEDDED_OR_KEY = "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";
+const FALLBACK_MODELS = [
+  "google/gemini-flash-1.5",
+  "meta-llama/llama-3.1-70b-instruct:free",
+  "meta-llama/llama-3.1-8b-instruct:free",
+  "qwen/qwen-2.5-7b-instruct",
+  "mistralai/mistral-small-latest"
+];
+
+/* ===== State ===== */
 const S={level:'A1',scenario:'general',stop:true,speaking:false,history:[],deck:[],lang:localStorage.getItem('lang_key')||'es',currentIndex:0,lastExpected:"",lastEN:"",turn:0,userFacts:{}};
-const cfg={openrouterKey:localStorage.getItem('or_key')||'',openrouterModel:localStorage.getItem('or_model')||'meta-llama/llama-3.2-11b-vision-instruct:free',groqKey:localStorage.getItem('groq_key')||'',forceRemote:JSON.parse(localStorage.getItem('force_remote')||'false')};
+const cfg={
+  openrouterKey: localStorage.getItem('or_key') || EMBEDDED_OR_KEY,
+  openrouterModel: localStorage.getItem('or_model') || FALLBACK_MODELS[0],
+  groqKey: localStorage.getItem('groq_key') || '',
+  forceRemote: JSON.parse(localStorage.getItem('force_remote') || 'false')
+};
 
 /* ===== UI refs ===== */
 const chatEl=document.getElementById('chat'),statusEl=document.getElementById('status'),llmSourceEl=document.getElementById('llmSource');
 const xpEl=document.getElementById('xp'),xpFill=document.getElementById('xpfill');const levelEl=document.getElementById('level');
-const sayRes=document.getElementById('sayResult'),sayScoreEl=document.getElementById('sayScore');const langSelect=document.getElementById('langSelect');
-const forceRemote=document.getElementById('forceRemote');forceRemote.checked=cfg.forceRemote;
+const sayRes=document.getElementById('sayResult'),sayScoreEl=document.getElementById('sayScore');
+const langSelect=document.getElementById('langSelect');
+const forceRemote=document.getElementById('forceRemote');
 
 /* ===== Helpers ===== */
 function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
@@ -188,7 +222,7 @@ function renderLangSelect(){
   };
 }
 
-/* ===== TTS ===== */
+/* ===== TTS / Speech ===== */
 async function speak(text,code){if(!('speechSynthesis'in window))return;return new Promise(res=>{const u=new SpeechSynthesisUtterance(text);u.lang=code;u.rate=1.0;S.speaking=true;u.onend=()=>{S.speaking=false;res()};u.onerror=()=>{S.speaking=false;res()};try{speechSynthesis.cancel();}catch{}speechSynthesis.speak(u);});}
 function cancelSpeak(){try{speechSynthesis.cancel();}catch{}S.speaking=false}
 
@@ -200,7 +234,7 @@ async function recordBlob(ms=8000){if(!navigator.mediaDevices?.getUserMedia)retu
 async function listenGroq(lang){try{const b=await recordBlob(7000);if(!b)return'';const f=new FormData();f.append('file',b,'speech.webm');f.append('model','whisper-large-v3-turbo');f.append('language',(lang||'en-GB').slice(0,2));const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{'Authorization':'Bearer '+cfg.groqKey},body:f});if(!r.ok)throw new Error('groq stt error');const j=await r.json();return j.text||''}catch{return''}}
 async function listen(lang){return cfg.groqKey?await listenGroq(lang):await listenBrowser(lang)}
 
-/* ===== OpenRouter + WebLLM (diagnostics + strict errors) ===== */
+/* ===== OpenRouter + Local (with diagnostics & fallbacks) ===== */
 let webllmEngine=null,webllmReady=false;
 async function initWebLLM(){ if(webllmReady)return; if(!('mlc'in window))throw new Error('WebLLM missing');
   const cb=(x)=>setStatus('loading: '+(x.text||'')); try{ webllmEngine=await mlc.createMLCEngine("Qwen2-1.5B-Instruct-q4f32_1",{initProgressCallback:cb}) }catch{ webllmEngine=await mlc.createMLCEngine("Qwen2-0.5B-Instruct-q4f32_1",{initProgressCallback:cb}) } webllmReady=true; }
@@ -208,32 +242,46 @@ async function wllmChat(messages,max=220){ await initWebLLM(); const out=await w
 
 function makeHeaders(){
   const hdr={'Content-Type':'application/json','Authorization':'Bearer '+cfg.openrouterKey,'X-Title':'EuroLingo Tutor'};
-  // Only send Referer on real http(s) origins to avoid CORS preflight failures on file://
   try{ if(/^https?:\/\//i.test(location.origin)) hdr['HTTP-Referer']=location.origin; }catch{}
   return hdr;
 }
-async function orChat(messages,max=220){
-  if(!cfg.openrouterKey) throw new Error('no-key');
-  const body={model:cfg.openrouterModel,messages,temperature:0.7,max_tokens:max};
-  let resp;
-  try{
-    resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-      method:'POST',mode:'cors',credentials:'omit',
-      headers:makeHeaders(),
-      body:JSON.stringify(body)
-    });
-  }catch(e){
-    throw new Error('network:'+ (e?.message||'unknown'));
-  }
+async function tryModel(messages, model, max=220){
+  const body={model, messages, temperature:0.7, max_tokens:max};
+  const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST', mode:'cors', credentials:'omit',
+    headers: makeHeaders(),
+    body: JSON.stringify(body)
+  });
+  const text=await resp.text();
   if(!resp.ok){
-    const text=await resp.text().catch(()=>String(resp.status));
-    throw new Error('http-'+resp.status+': '+text.slice(0,280));
+    const err=new Error('http-'+resp.status+': '+text.slice(0,280));
+    err.status=resp.status; err.body=text; throw err;
   }
-  const j=await resp.json();
+  const j=JSON.parse(text);
   return (j.choices?.[0]?.message?.content||'').trim();
 }
+async function orChat(messages,max=220){
+  if(!cfg.openrouterKey) throw new Error('no-key');
+  // 1) try configured model
+  try{
+    return await tryModel(messages, cfg.openrouterModel, max);
+  }catch(e){
+    if(String(e.status)!=='404') throw e; // only fallback on 404
+  }
+  // 2) rotate fallbacks
+  let lastErr=null;
+  for(const m of FALLBACK_MODELS){
+    try{
+      const out=await tryModel(messages, m, max);
+      cfg.openrouterModel=m; localStorage.setItem('or_model',m);
+      const orStatus=document.getElementById('orStatus'); if(orStatus) orStatus.textContent=`Switched to ${m} ✅`;
+      return out;
+    }catch(err){ lastErr=err; }
+  }
+  throw lastErr||new Error('No working model found');
+}
 
-/* ===== Conversational prompt ===== */
+/* ===== Conversational Prompt ===== */
 function sysPrompt(){
   return `
 You are "${L().tutor}", a ${L().label} travel tutor. Answer the user's content directly.
@@ -260,7 +308,7 @@ function parseTwo(text){
   return {nat:(lines[0]||"¿Seguimos?"),en:(lines[1]||"Let’s keep going.")};
 }
 
-/* ===== Simple facts to stay on topic ===== */
+/* ===== Simple facts to stay on-topic ===== */
 function updateFactsFromUser(uttr){
   const s=(uttr||'').toLowerCase();
   if(/hotel|hostel|airbnb|check/.test(s)) S.userFacts.context='hotel';
@@ -270,7 +318,7 @@ function updateFactsFromUser(uttr){
   if(place) S.userFacts.city=place;
 }
 
-/* ===== Scenario + meters (unchanged) ===== */
+/* ===== Scenario + meters ===== */
 function detectScenario(t){const s=(t||'').toLowerCase();if(/resta|menu|camar|rechnung|tisch|garçon|bill|mesa|menú|speisekarte|kellner|carte|order|dish/.test(s))return 'restaurant';if(/taxi|airport|aeropuerto|flughafen|aéroport|gare|station|metro|bus|train|ubahn|u-bahn|flight/.test(s))return 'taxi';if(/direc|left|right|straight|izquierda|derecha|gauche|droite|links|rechts|geradeaus|wo ist|map/.test(s))return 'directions';if(/hotel|room|check|llave|schlüssel|clé|frühstück|desayuno|reception|reservation/.test(s))return 'hotel';if(/money|euros?|price|precio|wie viel|combien|tarjeta|efectivo|cash|atm/.test(s))return 'money';if(/help|ayuda|hilfe|police|polizei|ambulance|apotheke|farmacia|emergen|lost|stolen/.test(s))return 'emergencies';if(/friend|foto|recommend|recomienda|empfehl|social|smalltalk|charla|conversa|museum|bar|park/.test(s))return 'social';return S.scenario||'social'}
 const bars={pron:document.getElementById('pronBar'),accent:document.getElementById('accentBar'),flu:document.getElementById('fluencyBar'),conf:document.getElementById('confBar')};
 const tips={pron:document.getElementById('pronTip'),accent:document.getElementById('accentTip'),flu:document.getElementById('fluencyTip'),conf:document.getElementById('confTip')};
@@ -314,19 +362,15 @@ async function reply(userText){
     raw=await orChat(msgs(userText));
     llmSourceEl.textContent='OpenRouter';
   }catch(e){
-    const msg = (e && e.message) ? e.message : 'unknown';
+    const msg=(e && e.message)?e.message:'unknown';
     logSys('OpenRouter failed → '+msg);
     document.getElementById('orStatus').textContent='OpenRouter error: '+msg;
-    if (cfg.forceRemote){
-      // Do not fallback; surface the error so you can fix key/origin/model.
-      throw new Error('remote-required');
-    }
+    if(cfg.forceRemote){ throw new Error('remote-required'); }
     used='Local';
     try{ raw=await wllmChat(msgs(userText)) }catch{ raw='' }
     llmSourceEl.textContent='Local';
   }
   let {nat,en}=parseTwo(raw);
-  // Lightweight anti-generic: if reply is bland and we have user content, nudge it
   if((/¿Seguimos|Pick a topic|continue/i.test(nat)||!nat) && userText){
     const scen=detectScenario(userText);
     const targeted={restaurant:'“¿Quieres pedir algo en concreto?” ¿Entrada o plato principal?',taxi:'“Te llevo.” ¿Dirección exacta o punto de referencia?',directions:'“Sigue recto, luego a la izquierda.” ¿Qué lugar buscas?',hotel:'“Tengo una reserva.” ¿Check-in ahora o preguntas sobre desayuno?',money:'“¿Puedo pagar con tarjeta?” ¿Presupuesto aproximado?',emergencies:'“Necesito ayuda.” ¿Qué pasó y dónde estás?',social:'“¿Viajas por trabajo o placer?” ¿Cuántos días te quedas?',general:'“Perfecto.” Dame un detalle más y te ayudo.'}[scen];
@@ -354,7 +398,6 @@ async function handleTurn(text){
   try{
     out=await reply(text);
   }catch(e){
-    // If remote-only and failed, stop loop so you can fix settings
     setStatus('OpenRouter required — fix key/origin/model and press Start');
     return;
   }
@@ -389,23 +432,57 @@ function resetConversation(notify){S.stop=true;S.history=[];S.scenario='general'
 document.getElementById('startBtn').onclick=()=>{setStatus('starting…');start()}
 document.getElementById('stopBtn').onclick=()=>stopAll()
 document.getElementById('interruptBtn').onclick=()=>{cancelSpeak();setStatus('interrupted → listening')}
-document.getElementById('saveOR').onclick=()=>{const k=(document.getElementById('orKey').value||'').trim();const m=(document.getElementById('orModel').value||'').trim();if(k)cfg.openrouterKey=k;cfg.openrouterModel=m||cfg.openrouterModel;cfg.forceRemote=!!forceRemote.checked;localStorage.setItem('or_key',cfg.openrouterKey);localStorage.setItem('or_model',cfg.openrouterModel);localStorage.setItem('force_remote',JSON.stringify(cfg.forceRemote));document.getElementById('orStatus').textContent='Saved.'}
-document.getElementById('testOR').onclick=async()=>{document.getElementById('orStatus').textContent='Testing…';try{const ok=await orChat([{role:'system',content:'Say "OK" only.'},{role:'user',content:'Respond.'}],8);document.getElementById('orStatus').textContent=ok?'OpenRouter OK ✅':'No response ❌';llmSourceEl.textContent= ok?'OpenRouter':'—';}catch(e){document.getElementById('orStatus').textContent='OpenRouter error ❌ ('+e.message+')';llmSourceEl.textContent='—';}}
-document.getElementById('saveGroq').onclick=()=>{cfg.groqKey=(document.getElementById('groqKey').value||'').trim();localStorage.setItem('groq_key',cfg.groqKey);document.getElementById('groqStatus').textContent=cfg.groqKey?'STT via Groq Whisper':'STT via browser'}
+
+document.getElementById('saveOR').onclick=()=>{
+  const k=(document.getElementById('orKey').value||'').trim();
+  const m=(document.getElementById('orModel').value||'').trim();
+  if(k) cfg.openrouterKey=k;
+  if(m) cfg.openrouterModel=m;
+  cfg.forceRemote=!!document.getElementById('forceRemote').checked;
+  localStorage.setItem('or_key',cfg.openrouterKey);
+  localStorage.setItem('or_model',cfg.openrouterModel);
+  localStorage.setItem('force_remote',JSON.stringify(cfg.forceRemote));
+  document.getElementById('orStatus').textContent='Saved.';
+}
+document.getElementById('testOR').onclick=async()=>{
+  const el=document.getElementById('orStatus');
+  el.textContent='Testing…';
+  try{
+    const ok=await orChat([{role:'system',content:'Say "OK" only.'},{role:'user',content:'Respond.'}],6);
+    el.textContent=`OpenRouter OK ✅ (model: ${cfg.openrouterModel})`;
+    llmSourceEl.textContent='OpenRouter';
+  }catch(e){
+    el.textContent='OpenRouter error ❌ ('+(e.message||'unknown')+')';
+    llmSourceEl.textContent='—';
+  }
+}
+document.getElementById('saveGroq').onclick=()=>{
+  cfg.groqKey=(document.getElementById('groqKey').value||'').trim();
+  localStorage.setItem('groq_key',cfg.groqKey);
+  document.getElementById('groqStatus').textContent=cfg.groqKey?'STT via Groq Whisper':'STT via browser'
+}
 
 /* ===== Seeding per-language ===== */
 function seedDeckForLang(lang){
-  const seed={es:[["A table for two, please","Una mesa para dos, por favor","restaurant"],["Where is the metro?","¿Dónde está el metro?","directions"],["The bill, please","La cuenta, por favor","restaurant"]],de:[["To the airport, please","Zum Flughafen, bitte.","taxi"],["Where is the metro?","Wo ist die U-Bahn?","directions"],["The bill, please","Die Rechnung, bitte.","restaurant"]],fr:[["Where is the metro?","Où est le métro ?","directions"],["Do you take card?","Je peux payer par carte ?","money"],["The bill, please","L’addition, s’il vous plaît.","restaurant"]]}[lang]||[["A table for two, please","Una mesa para dos, por favor","restaurant"]];
+  const seed={es:[["A table for two, please","Una mesa para dos, por favor","restaurant"],["Where is the metro?","¿Dónde está el metro?","directions"],["The bill, please","La cuenta, por favor","restaurant"]],
+              de:[["To the airport, please","Zum Flughafen, bitte.","taxi"],["Where is the metro?","Wo ist die U-Bahn?","directions"],["The bill, please","Die Rechnung, bitte.","restaurant"]],
+              fr:[["Where is the metro?","Où est le métro ?","directions"],["Do you take card?","Je peux payer par carte ?","money"],["The bill, please","L’addition, s’il vous plaît.","restaurant"]]}[lang]
+              || [["A table for two, please","Una mesa para dos, por favor","restaurant"]];
   S.deck=[]; seed.forEach(([en,native,mod])=>S.deck.push(newCard(en,native,mod))); saveDeck();
 }
 
 /* ===== Init ===== */
 (function init(){
-  // UI
-  renderLangSelect(); document.getElementById('streak').textContent='0';document.getElementById('combo').textContent='x1';document.getElementById('xp').textContent='0';levelEl.textContent=S.level;
-  // Decks
+  // Prefill settings UI
+  document.getElementById('orKey').value = cfg.openrouterKey;
+  document.getElementById('orModel').value = cfg.openrouterModel;
+  document.getElementById('forceRemote').checked = cfg.forceRemote;
+
+  renderLangSelect();
+  document.getElementById('streak').textContent='0';document.getElementById('combo').textContent='x1';document.getElementById('xp').textContent='0';levelEl.textContent=S.level;
+
   loadDeck(); if(!S.deck.length) seedDeckForLang(S.lang); showCard(0);
-  logSys("Tip: Use https origin (or a dev server). Toggle ‘Force OpenRouter’ to prevent silent fallback.");
+  logSys("Tip: serve over https or localhost. Test to confirm OpenRouter; badge shows the active engine.");
 })();
 </script>
 </body>
